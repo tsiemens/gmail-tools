@@ -1,2 +1,2 @@
-# gmail-filters-plus
-Cli Tools for Gmail filters
+# gmail-tools
+Cli tools for Gmail filters, management, etc.
