@@ -2,7 +2,7 @@ export GOPATH=$(shell echo $$(readlink -f $$(pwd)/../../../..))
 
 build:
 	mkdir -p bld
-	go build -o bld/gmailcli main/main.go
+	go build -o bld/gmailcli main.go
 
 getdeps:
 	go get -u google.golang.org/api/gmail/v1

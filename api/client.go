@@ -6,22 +6,23 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
-	"os/user"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
+
+	"github.com/tsiemens/gmail-tools/util"
 )
 
 const (
 	CredentialsDirName   = ".credentials"
-	ClientSecretDirName  = ".gmailcli"
 	ClientSecretFileName = "client_secret.json"
+
+	// Just use the user that we have credentials for
+	DefaultUser = "me"
 )
 
 type ScopeProfile struct {
@@ -36,7 +37,6 @@ func (s *ScopeProfile) ScopesString() string {
 // Scope docs: https://godoc.org/google.golang.org/api/gmail/v1
 // If modifying these scopes, delete your previously saved credentials
 // at ~/.credentials/...
-// TODO these maybe can share the same file. Need to test once I do some write actions
 var ReadScope = &ScopeProfile{
 	Scopes:   []string{gmail.GmailReadonlyScope},
 	CredFile: "gmailcli_read.json",
@@ -52,24 +52,14 @@ var ModifyScope = &ScopeProfile{
 	CredFile: "gmailcli_modify.json",
 }
 
-func homeDirAndFile(dir, fname string) (string, error) {
-	usr, err := user.Current()
-	if err != nil {
-		return "", err
-	}
-	tokenCacheDir := filepath.Join(usr.HomeDir, dir)
-	os.MkdirAll(tokenCacheDir, 0700)
-	return filepath.Join(tokenCacheDir, url.QueryEscape(fname)), err
-}
-
 // tokenCacheFile generates credential file ~/.credentials/gmailcli.json
 // It returns the generated credential filepath
 func tokenCacheFile(scope *ScopeProfile) (string, error) {
-	return homeDirAndFile(CredentialsDirName, scope.CredFile)
+	return util.HomeDirAndFile(CredentialsDirName, scope.CredFile)
 }
 
 func clientSecretFile() (string, error) {
-	return homeDirAndFile(ClientSecretDirName, ClientSecretFileName)
+	return util.HomeDirAndFile(util.UserAppDirName, ClientSecretFileName)
 }
 
 // getClient uses a Context and Config to retrieve a Token

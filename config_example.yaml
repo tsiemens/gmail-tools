@@ -1,0 +1,12 @@
+# This should go in ~/.gmailcli/config.yaml
+DoNotArchiveQuery: (myname OR to:me@gmail.com)
+
+ArchiveLabelPatterns:
+   - UnimportantLabel1
+   - UnimportantLabel2
+
+DoNotArchiveLabelPatterns:
+   - IMPORTANT
+   - MyImportantDir/.*
+
+ApplyExtraArchiveLabel: xCliArchived
