@@ -22,8 +22,11 @@ const (
 	inboxLabelId = "INBOX"
 )
 
+var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
+
 var dry = false
 var verbose = false
+var archiveRead = false
 
 func messageLabelNames(m *gm.Message, labels map[string]string) []string {
 	var lNames []string
@@ -34,18 +37,80 @@ func messageLabelNames(m *gm.Message, labels map[string]string) []string {
 }
 
 func printMessage(m *gm.Message, labels map[string]string) {
-	if m.Payload == nil || m.Payload.Headers == nil {
-		fmt.Println("- <No subject>")
-		return
-	} else {
+	var subject string
+	var from string
+	if m.Payload != nil && m.Payload.Headers != nil {
 		for _, hdr := range m.Payload.Headers {
 			if hdr.Name == "Subject" {
-				fmt.Printf("- %s\n", hdr.Value)
-				break
+				subject = hdr.Value
+			}
+			if hdr.Name == "From" {
+				matches := fromFieldRegexp.FindStringSubmatch(hdr.Value)
+				if len(matches) > 0 {
+					from = matches[1]
+				} else {
+					from = hdr.Value
+				}
 			}
 		}
 	}
-	fmt.Printf("    [%s]\n", strings.Join(messageLabelNames(m, labels), ", "))
+	if subject == "" {
+		subject = "<No subject>"
+	}
+	if from == "" {
+		from = "<unknown sender>"
+	}
+
+	labelNames := messageLabelNames(m, labels)
+	// Filter out some labels here
+	var labelsToShow []string
+	for _, l := range labelNames {
+		if !util.DebugMode &&
+			(strings.HasPrefix(l, "CATEGORY_") ||
+				l == "INBOX") {
+			continue
+		}
+		labelsToShow = append(labelsToShow, l)
+	}
+
+	fmt.Printf("- %s [%s] %s\n", from, strings.Join(labelsToShow, ", "), subject)
+}
+
+func printMessagesByCategory(msgs []*gm.Message, labels map[string]string) {
+	catNames := []string{"PERSONAL", "SOCIAL", "PROMOTIONS", "UPDATES", "FORUMS"}
+	var catIds []string
+	for _, cn := range catNames {
+		catIds = append(catIds, "CATEGORY_"+cn)
+	}
+	msgsByCat := make(map[string][]*gm.Message)
+	for _, id := range catIds {
+		msgsByCat[id] = make([]*gm.Message, 0)
+	}
+
+	for _, m := range msgs {
+		foundCat := false
+		for _, lId := range m.LabelIds {
+			if _, ok := msgsByCat[lId]; ok {
+				msgsByCat[lId] = append(msgsByCat[lId], m)
+				foundCat = true
+			}
+		}
+		if !foundCat {
+			fmt.Println("Found no category for msg:")
+			printMessage(m, labels)
+			log.Fatal()
+		}
+	}
+
+	for i, cat := range catIds {
+		catMsgs := msgsByCat[cat]
+		if len(catMsgs) > 0 {
+			fmt.Println(catNames[i])
+			for _, m := range catMsgs {
+				printMessage(m, labels)
+			}
+		}
+	}
 }
 
 type ConfigModel struct {
@@ -95,12 +160,6 @@ func loadConfig() *ConfigModel {
 	return conf
 }
 
-type Archiver struct {
-	srv    *gm.Service
-	labels map[string]string
-	conf   *ConfigModel
-}
-
 func getLabels(srv *gm.Service) map[string]string {
 	r, err := srv.Users.Labels.List(api.DefaultUser).Do()
 	if err != nil {
@@ -113,6 +172,12 @@ func getLabels(srv *gm.Service) map[string]string {
 	return labelMap
 }
 
+type Archiver struct {
+	srv    *gm.Service
+	labels map[string]string
+	conf   *ConfigModel
+}
+
 func NewArchiver(srv *gm.Service, labels map[string]string, conf *ConfigModel) *Archiver {
 	if srv == nil || labels == nil || conf == nil {
 		log.Fatalln("Internal error creating Archiver: ", srv, labels, conf)
@@ -121,8 +186,13 @@ func NewArchiver(srv *gm.Service, labels map[string]string, conf *ConfigModel) *
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
+	var unreadOnly string
+	if !archiveRead {
+		unreadOnly = "label:unread"
+	}
+
 	r, err := a.srv.Users.Messages.List(api.DefaultUser).
-		Q("in:inbox -(" + a.conf.DoNotArchiveQuery + ")").Do()
+		Q("in:inbox " + unreadOnly + " -(" + a.conf.DoNotArchiveQuery + ")").Do()
 	if err != nil {
 		log.Fatalf("Unable to retrieve messages: %v", err)
 	}
@@ -222,10 +292,8 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 	if len(msgsToArchive) > 0 {
 		if verbose {
 			fmt.Println("Messages to archive:")
-			for _, m := range msgsToArchive {
-				printMessage(m, labels)
-				fmt.Print("\n")
-			}
+			printMessagesByCategory(msgsToArchive, labels)
+			fmt.Print("\n")
 		}
 
 		fmt.Printf("Message count: %d\n", len(msgsToArchive))
@@ -252,9 +320,10 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 
 // archiveCmd represents the archive command
 var archiveCmd = &cobra.Command{
-	Use:   "archive",
-	Short: "Attempts to archive unread threads in the inbox, based on the rules in TODO",
-	Run:   runArchiveCmd,
+	Use: "archive",
+	Short: "Attempts to archive unread messages in the inbox, based on the rules " +
+		"in ~/.gmailcli/config.yaml",
+	Run: runArchiveCmd,
 }
 
 func init() {
@@ -262,7 +331,8 @@ func init() {
 
 	archiveCmd.Flags().BoolVarP(&dry, "dry", "n", false,
 		"Perform no action, just print what would be done")
-
 	archiveCmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"Print verbose output (show all messages to archive)")
+	archiveCmd.Flags().BoolVarP(&archiveRead, "include-read", "r", false,
+		"Archive read and unread inbox messages")
 }
