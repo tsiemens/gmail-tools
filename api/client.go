@@ -20,10 +20,37 @@ import (
 
 const (
 	CredentialsDirName   = ".credentials"
-	CredentialsFileName  = "gmailcli.json"
 	ClientSecretDirName  = ".gmailcli"
 	ClientSecretFileName = "client_secret.json"
 )
+
+type ScopeProfile struct {
+	Scopes   []string
+	CredFile string
+}
+
+func (s *ScopeProfile) ScopesString() string {
+	return strings.Join(s.Scopes, " ")
+}
+
+// Scope docs: https://godoc.org/google.golang.org/api/gmail/v1
+// If modifying these scopes, delete your previously saved credentials
+// at ~/.credentials/...
+// TODO these maybe can share the same file. Need to test once I do some write actions
+var ReadScope = &ScopeProfile{
+	Scopes:   []string{gmail.GmailReadonlyScope},
+	CredFile: "gmailcli_read.json",
+}
+
+var LabelsScope = &ScopeProfile{
+	Scopes:   []string{gmail.GmailReadonlyScope, gmail.GmailMetadataScope},
+	CredFile: "gmailcli_labels.json",
+}
+
+var ModifyScope = &ScopeProfile{
+	Scopes:   []string{gmail.GmailModifyScope},
+	CredFile: "gmailcli_modify.json",
+}
 
 func homeDirAndFile(dir, fname string) (string, error) {
 	usr, err := user.Current()
@@ -37,8 +64,8 @@ func homeDirAndFile(dir, fname string) (string, error) {
 
 // tokenCacheFile generates credential file ~/.credentials/gmailcli.json
 // It returns the generated credential filepath
-func tokenCacheFile() (string, error) {
-	return homeDirAndFile(CredentialsDirName, CredentialsFileName)
+func tokenCacheFile(scope *ScopeProfile) (string, error) {
+	return homeDirAndFile(CredentialsDirName, scope.CredFile)
 }
 
 func clientSecretFile() (string, error) {
@@ -47,8 +74,8 @@ func clientSecretFile() (string, error) {
 
 // getClient uses a Context and Config to retrieve a Token
 // then generate a Client. It returns the generated Client.
-func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-	cacheFile, err := tokenCacheFile()
+func getClient(ctx context.Context, config *oauth2.Config, scope *ScopeProfile) *http.Client {
+	cacheFile, err := tokenCacheFile(scope)
 	if err != nil {
 		log.Fatalf("Unable to get path to cached credential file. %v", err)
 	}
@@ -112,7 +139,7 @@ func getClientSecret() ([]byte, error) {
 	return ioutil.ReadFile(secretFname)
 }
 
-func NewGmailClient() *gmail.Service {
+func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 	ctx := context.Background()
 
 	secret, err := getClientSecret()
@@ -120,14 +147,11 @@ func NewGmailClient() *gmail.Service {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
-	// If modifying these scopes, delete your previously saved credentials
-	// at ~/.credentials/gmail-go-quickstart.json
-	scopes := []string{gmail.GmailReadonlyScope, gmail.GmailMetadataScope}
-	config, err := google.ConfigFromJSON(secret, strings.Join(scopes, " "))
+	config, err := google.ConfigFromJSON(secret, scope.ScopesString())
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	client := getClient(ctx, config)
+	client := getClient(ctx, config, scope)
 
 	srv, err := gmail.New(client)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 )
 
 func runDemoCmd(cmd *cobra.Command, args []string) {
-	srv := api.NewGmailClient()
+	srv := api.NewGmailClient(api.ReadScope)
 
 	// Temporary demo script
 	user := "me"
@@ -21,7 +21,7 @@ func runDemoCmd(cmd *cobra.Command, args []string) {
 	if len(r.Labels) > 0 {
 		fmt.Print("Labels:\n")
 		for _, l := range r.Labels {
-			fmt.Printf("- %s\n", l.Name)
+			fmt.Printf("- %s: %s\n", l.Id, l.Name)
 		}
 	} else {
 		fmt.Print("No labels found.")
