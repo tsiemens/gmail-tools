@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"regexp"
-	"strings"
 
 	"github.com/spf13/cobra"
 	gm "google.golang.org/api/gmail/v1"
@@ -22,96 +21,9 @@ const (
 	inboxLabelId = "INBOX"
 )
 
-var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
-
 var dry = false
 var verbose = false
 var archiveRead = false
-
-func messageLabelNames(m *gm.Message, labels map[string]string) []string {
-	var lNames []string
-	for _, lId := range m.LabelIds {
-		lNames = append(lNames, labels[lId])
-	}
-	return lNames
-}
-
-func printMessage(m *gm.Message, labels map[string]string) {
-	var subject string
-	var from string
-	if m.Payload != nil && m.Payload.Headers != nil {
-		for _, hdr := range m.Payload.Headers {
-			if hdr.Name == "Subject" {
-				subject = hdr.Value
-			}
-			if hdr.Name == "From" {
-				matches := fromFieldRegexp.FindStringSubmatch(hdr.Value)
-				if len(matches) > 0 {
-					from = matches[1]
-				} else {
-					from = hdr.Value
-				}
-			}
-		}
-	}
-	if subject == "" {
-		subject = "<No subject>"
-	}
-	if from == "" {
-		from = "<unknown sender>"
-	}
-
-	labelNames := messageLabelNames(m, labels)
-	// Filter out some labels here
-	var labelsToShow []string
-	for _, l := range labelNames {
-		if !util.DebugMode &&
-			(strings.HasPrefix(l, "CATEGORY_") ||
-				l == "INBOX") {
-			continue
-		}
-		labelsToShow = append(labelsToShow, l)
-	}
-
-	fmt.Printf("- %s [%s] %s\n", from, strings.Join(labelsToShow, ", "), subject)
-}
-
-func printMessagesByCategory(msgs []*gm.Message, labels map[string]string) {
-	catNames := []string{"PERSONAL", "SOCIAL", "PROMOTIONS", "UPDATES", "FORUMS"}
-	var catIds []string
-	for _, cn := range catNames {
-		catIds = append(catIds, "CATEGORY_"+cn)
-	}
-	msgsByCat := make(map[string][]*gm.Message)
-	for _, id := range catIds {
-		msgsByCat[id] = make([]*gm.Message, 0)
-	}
-
-	for _, m := range msgs {
-		foundCat := false
-		for _, lId := range m.LabelIds {
-			if _, ok := msgsByCat[lId]; ok {
-				msgsByCat[lId] = append(msgsByCat[lId], m)
-				foundCat = true
-			}
-		}
-		if !foundCat {
-			fmt.Println("Found no category for msg:")
-			printMessage(m, labels)
-			log.Fatal()
-		}
-	}
-
-	for i, cat := range catIds {
-		catMsgs := msgsByCat[cat]
-		if len(catMsgs) > 0 {
-			fmt.Println(catNames[i])
-			for _, m := range catMsgs {
-				printMessage(m, labels)
-			}
-		}
-	}
-}
 
 type ConfigModel struct {
 	DoNotArchiveQuery         string   `yaml:"DoNotArchiveQuery"`
@@ -160,49 +72,28 @@ func loadConfig() *ConfigModel {
 	return conf
 }
 
-func getLabels(srv *gm.Service) map[string]string {
-	r, err := srv.Users.Labels.List(api.DefaultUser).Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve labels. %v", err)
-	}
-	labelMap := make(map[string]string)
-	for _, l := range r.Labels {
-		labelMap[l.Id] = l.Name
-	}
-	return labelMap
-}
-
 type Archiver struct {
 	srv    *gm.Service
-	labels map[string]string
 	conf   *ConfigModel
+	helper *GmailHelper
 }
 
-func NewArchiver(srv *gm.Service, labels map[string]string, conf *ConfigModel) *Archiver {
-	if srv == nil || labels == nil || conf == nil {
-		log.Fatalln("Internal error creating Archiver: ", srv, labels, conf)
+func NewArchiver(srv *gm.Service, conf *ConfigModel, helper *GmailHelper) *Archiver {
+	if srv == nil || conf == nil || helper == nil {
+		log.Fatalln("Internal error creating Archiver: ", srv, conf, helper)
 	}
-	return &Archiver{srv: srv, labels: labels, conf: conf}
+	return &Archiver{srv: srv, conf: conf, helper: helper}
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
-	var unreadOnly string
-	if !archiveRead {
-		unreadOnly = "label:unread"
-	}
-
-	r, err := a.srv.Users.Messages.List(api.DefaultUser).
-		Q("in:inbox " + unreadOnly + " -(" + a.conf.DoNotArchiveQuery + ")").Do()
+	msgs, err := a.helper.QueryMessages(" -("+a.conf.DoNotArchiveQuery+")",
+		true, !archiveRead, true)
 	if err != nil {
-		log.Fatalf("Unable to retrieve messages: %v", err)
+		log.Fatalf("%v\n", err)
 	}
 
 	var msgsToArchive []*gm.Message
-	for _, m := range r.Messages {
-		msg, err := a.srv.Users.Messages.Get(api.DefaultUser, m.Id).Do()
-		if err != nil {
-			log.Fatal("Failed to get message")
-		}
+	for _, msg := range msgs {
 		if a.ShouldArchive(msg) {
 			msgsToArchive = append(msgsToArchive, msg)
 		}
@@ -215,7 +106,7 @@ func (a *Archiver) ShouldArchive(m *gm.Message) bool {
 	var matchedDni = false
 
 	for _, lId := range m.LabelIds {
-		lName := a.labels[lId]
+		lName := a.helper.LabelName(lId)
 		labelIgnored := false
 		for _, labRe := range a.conf.archiveLabelRegexps {
 			idxSlice := labRe.FindStringIndex(lName)
@@ -244,37 +135,21 @@ func (a *Archiver) ShouldArchive(m *gm.Message) bool {
 	return matchedIgnored && !matchedDni
 }
 
-func (a *Archiver) LabelIdFromName(label string) string {
-	for lId, lName := range a.labels {
-		if label == lName {
-			return lId
-		}
-	}
-	log.Fatalf("No label named %s found\n", label)
-	return ""
-}
-
 func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 	var addLabels []string
 
 	var extraLabelId string
 	if a.conf.ApplyExtraArchiveLabel != "" {
-		extraLabelId = a.LabelIdFromName(a.conf.ApplyExtraArchiveLabel)
+		extraLabelId = a.helper.LabelIdFromName(a.conf.ApplyExtraArchiveLabel)
 		addLabels = append(addLabels, extraLabelId)
 	}
 
-	var msgIds []string
-
-	for _, msg := range msgs {
-		msgIds = append(msgIds, msg.Id)
-	}
 	modReq := gm.BatchModifyMessagesRequest{
 		AddLabelIds:    addLabels,
 		RemoveLabelIds: []string{inboxLabelId},
-		Ids:            msgIds,
 	}
 
-	return a.srv.Users.Messages.BatchModify(api.DefaultUser, &modReq).Do()
+	return a.helper.BatchModifyMessages(msgs, &modReq)
 }
 
 func runArchiveCmd(cmd *cobra.Command, args []string) {
@@ -283,16 +158,16 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 
 	fmt.Print("Fetching inbox... ")
-	labels := getLabels(srv)
+	gHelper := NewGmailHelper(srv, api.DefaultUser)
 
-	arch := NewArchiver(srv, labels, conf)
+	arch := NewArchiver(srv, conf, gHelper)
 	msgsToArchive := arch.LoadMsgsToArchive()
 	fmt.Print("done\n")
 
 	if len(msgsToArchive) > 0 {
 		if verbose {
 			fmt.Println("Messages to archive:")
-			printMessagesByCategory(msgsToArchive, labels)
+			gHelper.PrintMessagesByCategory(msgsToArchive)
 			fmt.Print("\n")
 		}
 
