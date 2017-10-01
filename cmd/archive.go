@@ -26,13 +26,13 @@ var verbose = false
 var archiveRead = false
 
 type ConfigModel struct {
-	DoNotArchiveQuery         string   `yaml:"DoNotArchiveQuery"`
-	ArchiveLabelPatterns      []string `yaml:"ArchiveLabelPatterns"`
-	DoNotArchiveLabelPatterns []string `yaml:"DoNotArchiveLabelPatterns"`
-	ApplyExtraArchiveLabel    string   `yaml:"ApplyExtraArchiveLabel"`
+	InterestingMessageQuery    string   `yaml:"InterestingMessageQuery"`
+	UninterestingLabelPatterns []string `yaml:"UninterestingLabelPatterns"`
+	InterestingLabelPatterns   []string `yaml:"InterestingLabelPatterns"`
+	ApplyLabelToUninteresting  string   `yaml:"ApplyLabelToUninteresting"`
 
-	archiveLabelRegexps []*regexp.Regexp
-	dnaLabelRegexps     []*regexp.Regexp
+	uninterLabelRegexps []*regexp.Regexp
+	interLabelRegexps   []*regexp.Regexp
 }
 
 func loadConfig() *ConfigModel {
@@ -50,20 +50,20 @@ func loadConfig() *ConfigModel {
 	}
 	util.Debugf("config: %+v\n", conf)
 
-	for _, pat := range conf.ArchiveLabelPatterns {
+	for _, pat := range conf.UninterestingLabelPatterns {
 		re, err := regexp.Compile(caseIgnore + pat)
 		if err != nil {
 			break
 		}
-		conf.archiveLabelRegexps = append(conf.archiveLabelRegexps, re)
+		conf.uninterLabelRegexps = append(conf.uninterLabelRegexps, re)
 	}
 	if err == nil {
-		for _, pat := range conf.DoNotArchiveLabelPatterns {
+		for _, pat := range conf.InterestingLabelPatterns {
 			re, err := regexp.Compile(caseIgnore + pat)
 			if err != nil {
 				break
 			}
-			conf.dnaLabelRegexps = append(conf.dnaLabelRegexps, re)
+			conf.interLabelRegexps = append(conf.interLabelRegexps, re)
 		}
 	}
 	if err != nil {
@@ -86,7 +86,7 @@ func NewArchiver(srv *gm.Service, conf *ConfigModel, helper *GmailHelper) *Archi
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
-	msgs, err := a.helper.QueryMessages(" -("+a.conf.DoNotArchiveQuery+")",
+	msgs, err := a.helper.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
 		true, !archiveRead, true)
 	if err != nil {
 		log.Fatalf("%v\n", err)
@@ -108,7 +108,7 @@ func (a *Archiver) ShouldArchive(m *gm.Message) bool {
 	for _, lId := range m.LabelIds {
 		lName := a.helper.LabelName(lId)
 		labelIgnored := false
-		for _, labRe := range a.conf.archiveLabelRegexps {
+		for _, labRe := range a.conf.uninterLabelRegexps {
 			idxSlice := labRe.FindStringIndex(lName)
 			if idxSlice != nil {
 				labelIgnored = true
@@ -121,7 +121,7 @@ func (a *Archiver) ShouldArchive(m *gm.Message) bool {
 			// patterns are not applied.
 			continue
 		}
-		for _, labRe := range a.conf.dnaLabelRegexps {
+		for _, labRe := range a.conf.interLabelRegexps {
 			idxSlice := labRe.FindStringIndex(lName)
 			if idxSlice != nil {
 				matchedDni = true
@@ -139,8 +139,8 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 	var addLabels []string
 
 	var extraLabelId string
-	if a.conf.ApplyExtraArchiveLabel != "" {
-		extraLabelId = a.helper.LabelIdFromName(a.conf.ApplyExtraArchiveLabel)
+	if a.conf.ApplyLabelToUninteresting != "" {
+		extraLabelId = a.helper.LabelIdFromName(a.conf.ApplyLabelToUninteresting)
 		addLabels = append(addLabels, extraLabelId)
 	}
 
@@ -172,8 +172,8 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 		}
 
 		fmt.Printf("Message count: %d\n", len(msgsToArchive))
-		if conf.ApplyExtraArchiveLabel != "" {
-			fmt.Printf("Extra label %s will be applied.\n", conf.ApplyExtraArchiveLabel)
+		if conf.ApplyLabelToUninteresting != "" {
+			fmt.Printf("Extra label %s will be applied.\n", conf.ApplyLabelToUninteresting)
 		}
 
 		if dry {
