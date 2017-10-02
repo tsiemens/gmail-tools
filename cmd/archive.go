@@ -33,14 +33,17 @@ func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
+	detailLevel := LabelsOnly
+	if verbose {
+		detailLevel = LabelsAndPayload
+	}
 	msgs, err := a.helper.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
-		true, !archiveRead, true)
+		true, !archiveRead, detailLevel)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
 
 	var msgsToArchive []*gm.Message
-	fmt.Println(Uninteresting, MaybeInteresting, Interesting)
 	for _, msg := range msgs {
 		if a.helper.MsgInterest(msg) == Uninteresting {
 			msgsToArchive = append(msgsToArchive, msg)
@@ -112,7 +115,8 @@ var archiveCmd = &cobra.Command{
 	Use: "archive",
 	Short: "Attempts to archive unread messages in the inbox, based on the rules " +
 		"in ~/.gmailcli/config.yaml",
-	Run: runArchiveCmd,
+	Aliases: []string{"arch"},
+	Run:     runArchiveCmd,
 }
 
 func init() {

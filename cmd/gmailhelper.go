@@ -17,6 +17,11 @@ const (
 	ConfigYamlFileName = "config.yaml"
 
 	caseIgnore = "(?i)"
+
+	// Labels only
+	messageFormatMinimal = "minimal"
+	// Labels and payload data
+	messageFormatMetadata = "metadata"
 )
 
 type Config struct {
@@ -194,8 +199,16 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 	}
 }
 
+type MessageDetailLevel int
+
+const (
+	IdsOnly MessageDetailLevel = iota
+	LabelsOnly
+	LabelsAndPayload
+)
+
 func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly bool,
-	details bool) ([]*gm.Message, error) {
+	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
 
 	fullQuery := ""
 	if inboxOnly {
@@ -213,11 +226,20 @@ func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly boo
 		return nil, fmt.Errorf("Unable to get messages: %v", err)
 	}
 
+	loadDetails := (detailLevel != IdsOnly)
+	var format string
+	switch detailLevel {
+	case LabelsOnly:
+		format = messageFormatMinimal
+	case LabelsAndPayload:
+		format = messageFormatMetadata
+	}
+
 	var msgs []*gm.Message
 	for _, m := range r.Messages {
 		var msg *gm.Message
-		if details {
-			msg, err = h.srv.Users.Messages.Get(h.User, m.Id).Do()
+		if loadDetails {
+			msg, err = h.srv.Users.Messages.Get(h.User, m.Id).Format(format).Do()
 			if err != nil {
 				return nil, fmt.Errorf("Failed to get message: %v", err)
 			}
