@@ -2,24 +2,80 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"regexp"
 	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
+	"gopkg.in/yaml.v2"
 
 	"github.com/tsiemens/gmail-tools/util"
 )
+
+const (
+	ConfigYamlFileName = "config.yaml"
+
+	caseIgnore = "(?i)"
+)
+
+type Config struct {
+	InterestingMessageQuery    string   `yaml:"InterestingMessageQuery"`
+	UninterestingLabelPatterns []string `yaml:"UninterestingLabelPatterns"`
+	InterestingLabelPatterns   []string `yaml:"InterestingLabelPatterns"`
+	ApplyLabelToUninteresting  string   `yaml:"ApplyLabelToUninteresting"`
+
+	uninterLabelRegexps []*regexp.Regexp
+	interLabelRegexps   []*regexp.Regexp
+}
+
+func LoadConfig() *Config {
+	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
+
+	confData, err := ioutil.ReadFile(confFname)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	conf := &Config{}
+	err = yaml.Unmarshal(confData, conf)
+	if err != nil {
+		log.Fatalf("Could not unmarshal: %v", err)
+	}
+	util.Debugf("config: %+v\n", conf)
+
+	for _, pat := range conf.UninterestingLabelPatterns {
+		re, err := regexp.Compile(caseIgnore + pat)
+		if err != nil {
+			break
+		}
+		conf.uninterLabelRegexps = append(conf.uninterLabelRegexps, re)
+	}
+	if err == nil {
+		for _, pat := range conf.InterestingLabelPatterns {
+			re, err := regexp.Compile(caseIgnore + pat)
+			if err != nil {
+				break
+			}
+			conf.interLabelRegexps = append(conf.interLabelRegexps, re)
+		}
+	}
+	if err != nil {
+		log.Fatalf("Failed to load config: \"%s\"", err)
+	}
+	return conf
+}
 
 type GmailHelper struct {
 	User string
 
 	srv    *gm.Service
 	labels map[string]string // Label ID to label name
+	conf   *Config
 }
 
-func NewGmailHelper(srv *gm.Service, user string) *GmailHelper {
-	return &GmailHelper{User: user, srv: srv}
+func NewGmailHelper(srv *gm.Service, user string, conf *Config) *GmailHelper {
+	return &GmailHelper{User: user, srv: srv, conf: conf}
 }
 
 func (h *GmailHelper) loadLabels() error {
@@ -194,4 +250,51 @@ func (h *GmailHelper) BatchModifyMessages(msgs []*gm.Message,
 
 	modReq.Ids = msgIds
 	return h.srv.Users.Messages.BatchModify(h.User, modReq).Do()
+}
+
+type InterestLevel int
+
+const (
+	Uninteresting InterestLevel = iota
+	MaybeInteresting
+	Interesting
+)
+
+func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
+	var matchedUninter = false
+	var matchedInter = false
+
+	for _, lId := range m.LabelIds {
+		lName := h.LabelName(lId)
+		labelIsUninteresting := false
+		for _, labRe := range h.conf.uninterLabelRegexps {
+			idxSlice := labRe.FindStringIndex(lName)
+			if idxSlice != nil {
+				labelIsUninteresting = true
+				break
+			}
+		}
+		matchedUninter = matchedUninter || labelIsUninteresting
+		if labelIsUninteresting {
+			// If the label is explicitly uninteresting, then the "interesting" label
+			// patterns are not applied.
+			continue
+		}
+		for _, labRe := range h.conf.interLabelRegexps {
+			idxSlice := labRe.FindStringIndex(lName)
+			if idxSlice != nil {
+				matchedInter = true
+				break
+			}
+		}
+		if matchedInter {
+			break
+		}
+	}
+	if matchedInter {
+		return Interesting
+	} else if matchedUninter {
+		return Uninteresting
+	}
+	return MaybeInteresting
 }

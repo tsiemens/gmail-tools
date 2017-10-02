@@ -2,22 +2,16 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
-	"regexp"
 
 	"github.com/spf13/cobra"
 	gm "google.golang.org/api/gmail/v1"
-	"gopkg.in/yaml.v2"
 
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
 const (
-	ConfigYamlFileName = "config.yaml"
-
-	caseIgnore   = "(?i)"
 	inboxLabelId = "INBOX"
 )
 
@@ -25,60 +19,13 @@ var dry = false
 var verbose = false
 var archiveRead = false
 
-type ConfigModel struct {
-	InterestingMessageQuery    string   `yaml:"InterestingMessageQuery"`
-	UninterestingLabelPatterns []string `yaml:"UninterestingLabelPatterns"`
-	InterestingLabelPatterns   []string `yaml:"InterestingLabelPatterns"`
-	ApplyLabelToUninteresting  string   `yaml:"ApplyLabelToUninteresting"`
-
-	uninterLabelRegexps []*regexp.Regexp
-	interLabelRegexps   []*regexp.Regexp
-}
-
-func loadConfig() *ConfigModel {
-	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
-
-	confData, err := ioutil.ReadFile(confFname)
-	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
-	}
-
-	conf := &ConfigModel{}
-	err = yaml.Unmarshal(confData, conf)
-	if err != nil {
-		log.Fatalf("Could not unmarshal: %v", err)
-	}
-	util.Debugf("config: %+v\n", conf)
-
-	for _, pat := range conf.UninterestingLabelPatterns {
-		re, err := regexp.Compile(caseIgnore + pat)
-		if err != nil {
-			break
-		}
-		conf.uninterLabelRegexps = append(conf.uninterLabelRegexps, re)
-	}
-	if err == nil {
-		for _, pat := range conf.InterestingLabelPatterns {
-			re, err := regexp.Compile(caseIgnore + pat)
-			if err != nil {
-				break
-			}
-			conf.interLabelRegexps = append(conf.interLabelRegexps, re)
-		}
-	}
-	if err != nil {
-		log.Fatalf("Failed to load config: \"%s\"", err)
-	}
-	return conf
-}
-
 type Archiver struct {
 	srv    *gm.Service
-	conf   *ConfigModel
+	conf   *Config
 	helper *GmailHelper
 }
 
-func NewArchiver(srv *gm.Service, conf *ConfigModel, helper *GmailHelper) *Archiver {
+func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
 	if srv == nil || conf == nil || helper == nil {
 		log.Fatalln("Internal error creating Archiver: ", srv, conf, helper)
 	}
@@ -93,46 +40,13 @@ func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
 	}
 
 	var msgsToArchive []*gm.Message
+	fmt.Println(Uninteresting, MaybeInteresting, Interesting)
 	for _, msg := range msgs {
-		if a.ShouldArchive(msg) {
+		if a.helper.MsgInterest(msg) == Uninteresting {
 			msgsToArchive = append(msgsToArchive, msg)
 		}
 	}
 	return msgsToArchive
-}
-
-func (a *Archiver) ShouldArchive(m *gm.Message) bool {
-	var matchedIgnored = false
-	var matchedDni = false
-
-	for _, lId := range m.LabelIds {
-		lName := a.helper.LabelName(lId)
-		labelIgnored := false
-		for _, labRe := range a.conf.uninterLabelRegexps {
-			idxSlice := labRe.FindStringIndex(lName)
-			if idxSlice != nil {
-				labelIgnored = true
-				break
-			}
-		}
-		matchedIgnored = matchedIgnored || labelIgnored
-		if labelIgnored {
-			// If we have ignored the label, then the do-not-ignore label
-			// patterns are not applied.
-			continue
-		}
-		for _, labRe := range a.conf.interLabelRegexps {
-			idxSlice := labRe.FindStringIndex(lName)
-			if idxSlice != nil {
-				matchedDni = true
-				break
-			}
-		}
-		if matchedDni {
-			break
-		}
-	}
-	return matchedIgnored && !matchedDni
 }
 
 func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
@@ -153,12 +67,12 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 }
 
 func runArchiveCmd(cmd *cobra.Command, args []string) {
-	conf := loadConfig()
+	conf := LoadConfig()
 
 	srv := api.NewGmailClient(api.ModifyScope)
 
 	fmt.Print("Fetching inbox... ")
-	gHelper := NewGmailHelper(srv, api.DefaultUser)
+	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
 	arch := NewArchiver(srv, conf, gHelper)
 	msgsToArchive := arch.LoadMsgsToArchive()
