@@ -163,12 +163,14 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 }
 
 func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
+	noCat := "NO CATEGORY"
 	catNames := []string{"PERSONAL", "SOCIAL", "PROMOTIONS", "UPDATES", "FORUMS"}
 	var catIds []string
 	for _, cn := range catNames {
 		catIds = append(catIds, "CATEGORY_"+cn)
 	}
 	msgsByCat := make(map[string][]*gm.Message)
+	msgsByCat[noCat] = make([]*gm.Message, 0)
 	for _, id := range catIds {
 		msgsByCat[id] = make([]*gm.Message, 0)
 	}
@@ -182,9 +184,11 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 			}
 		}
 		if !foundCat {
-			fmt.Println("Found no category for msg:")
-			h.PrintMessage(m)
-			log.Fatal()
+			msgsByCat[noCat] = append(msgsByCat[noCat], m)
+			util.Debugf("Found no category for msg. Had labels %+v\n", m.LabelIds)
+			if util.DebugMode {
+				h.PrintMessage(m)
+			}
 		}
 	}
 
@@ -197,6 +201,14 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 			}
 		}
 	}
+	noCatMsgs := msgsByCat[noCat]
+	if len(noCatMsgs) > 0 {
+		fmt.Println(noCat)
+		for _, m := range noCatMsgs {
+			h.PrintMessage(m)
+		}
+	}
+
 }
 
 type MessageDetailLevel int
@@ -206,6 +218,38 @@ const (
 	LabelsOnly
 	LabelsAndPayload
 )
+
+func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
+	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
+
+	var format string
+	switch detailLevel {
+	case IdsOnly:
+		log.Fatalln("Invalid detailLevel: IdsOnly")
+	case LabelsOnly:
+		format = messageFormatMinimal
+	case LabelsAndPayload:
+		format = messageFormatMetadata
+	}
+
+	var detailedMsgs []*gm.Message
+
+	fmt.Print("Loading message details ")
+	for i, msg := range msgs {
+		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))
+		fmt.Print(progressStr)
+
+		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).Format(format).Do()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get message: %v", err)
+		}
+		detailedMsgs = append(detailedMsgs, dMsg)
+		fmt.Print(strings.Repeat("\x08", len(progressStr)))
+	}
+	fmt.Print("\n")
+
+	return detailedMsgs, nil
+}
 
 func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly bool,
 	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
@@ -220,33 +264,36 @@ func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly boo
 
 	fullQuery += query
 
-	util.Debugf("Querying messages: '%s'\n", fullQuery)
-	r, err := h.srv.Users.Messages.List(h.User).Q(fullQuery).Do()
-	if err != nil {
-		return nil, fmt.Errorf("Unable to get messages: %v", err)
-	}
-
-	loadDetails := (detailLevel != IdsOnly)
-	var format string
-	switch detailLevel {
-	case LabelsOnly:
-		format = messageFormatMinimal
-	case LabelsAndPayload:
-		format = messageFormatMetadata
-	}
-
+	pageToken := ""
+	queriedPageCnt := 0
 	var msgs []*gm.Message
-	for _, m := range r.Messages {
-		var msg *gm.Message
-		if loadDetails {
-			msg, err = h.srv.Users.Messages.Get(h.User, m.Id).Format(format).Do()
-			if err != nil {
-				return nil, fmt.Errorf("Failed to get message: %v", err)
-			}
-		} else {
-			msg = m
+
+	for queriedPageCnt == 0 || pageToken != "" {
+		queriedPageCnt++
+		util.Debugf("Querying messages: '%s', page: %d\n", fullQuery, queriedPageCnt)
+
+		call := h.srv.Users.Messages.List(h.User).Q(fullQuery)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
 		}
-		msgs = append(msgs, msg)
+		r, err := call.Do()
+		if err != nil {
+			return nil, fmt.Errorf("Unable to get messages: %v", err)
+		}
+
+		pageToken = r.NextPageToken
+
+		for _, m := range r.Messages {
+			msgs = append(msgs, m)
+		}
+	}
+
+	if detailLevel != IdsOnly {
+		var err error
+		msgs, err = h.LoadDetailedMessages(msgs, detailLevel)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return msgs, nil
 }

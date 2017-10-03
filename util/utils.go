@@ -15,15 +15,23 @@ const (
 	UserAppDirName = ".gmailcli"
 )
 
-func ConfirmFromInput(msg string) bool {
-	fmt.Printf("%s [Ny]: ", msg)
+func ConfirmFromInput(msg string, defaultYes bool) bool {
+	defaultStr := "[y/N]"
+	if defaultYes {
+		defaultStr = "[Y/n]"
+	}
+	fmt.Printf("%s %s: ", msg, defaultStr)
 	stdin := bufio.NewReader(os.Stdin)
 	reply, err := stdin.ReadString('\n')
 	if err != nil {
 		log.Fatalf("Unable to read input: %v", err)
 	}
 
-	return strings.HasPrefix(strings.ToLower(reply), "y")
+	if defaultYes {
+		return !strings.HasPrefix(strings.ToLower(reply), "n")
+	} else {
+		return strings.HasPrefix(strings.ToLower(reply), "y")
+	}
 }
 
 func HomeDirAndFile(dir, fname string) (string, error) {

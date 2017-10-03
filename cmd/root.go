@@ -11,6 +11,8 @@ import (
 	"github.com/tsiemens/gmail-tools/util"
 )
 
+var Verbose = false
+
 var cfgFile string
 
 func cmdName() string {
@@ -44,6 +46,9 @@ func init() {
 	// Persistent flags, which are global to the app cli
 	RootCmd.PersistentFlags().BoolVar(
 		&util.DebugMode, "debug", false, "Enable debug tracing")
+
+	RootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false,
+		"Print verbose output")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
