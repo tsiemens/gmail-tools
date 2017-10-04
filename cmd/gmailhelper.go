@@ -29,9 +29,11 @@ type Config struct {
 	UninterestingLabelPatterns []string `yaml:"UninterestingLabelPatterns"`
 	InterestingLabelPatterns   []string `yaml:"InterestingLabelPatterns"`
 	ApplyLabelToUninteresting  string   `yaml:"ApplyLabelToUninteresting"`
+	ApplyLabelOnTouch          string   `yaml:"ApplyLabelOnTouch"`
 
 	uninterLabelRegexps []*regexp.Regexp
 	interLabelRegexps   []*regexp.Regexp
+	configFile          string
 }
 
 func LoadConfig() *Config {
@@ -43,6 +45,7 @@ func LoadConfig() *Config {
 	}
 
 	conf := &Config{}
+	conf.configFile = confFname
 	err = yaml.Unmarshal(confData, conf)
 	if err != nil {
 		log.Fatalf("Could not unmarshal: %v", err)
