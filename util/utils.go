@@ -13,7 +13,30 @@ import (
 
 const (
 	UserAppDirName = ".gmailcli"
+
+	Bold      = "\033[1m"
+	ResetC    = "\033[0m"
+	FgRed     = "\033[31m"
+	FgGreen   = "\033[32m"
+	FgYellow  = "\033[33m"
+	FgBlue    = "\033[34m"
+	FgMagenta = "\033[35m"
+	FgCyan    = "\033[36m"
 )
+
+var Colors map[string]string
+
+func init() {
+	Colors = map[string]string{
+		"bold":    Bold,
+		"red":     FgRed,
+		"green":   FgGreen,
+		"yellow":  FgYellow,
+		"blue":    FgBlue,
+		"magenta": FgMagenta,
+		"cyan":    FgCyan,
+	}
+}
 
 func ConfirmFromInput(msg string, defaultYes bool) bool {
 	defaultStr := "[y/N]"

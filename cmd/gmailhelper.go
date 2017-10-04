@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 
@@ -25,11 +26,12 @@ const (
 )
 
 type Config struct {
-	InterestingMessageQuery    string   `yaml:"InterestingMessageQuery"`
-	UninterestingLabelPatterns []string `yaml:"UninterestingLabelPatterns"`
-	InterestingLabelPatterns   []string `yaml:"InterestingLabelPatterns"`
-	ApplyLabelToUninteresting  string   `yaml:"ApplyLabelToUninteresting"`
-	ApplyLabelOnTouch          string   `yaml:"ApplyLabelOnTouch"`
+	InterestingMessageQuery    string            `yaml:"InterestingMessageQuery"`
+	UninterestingLabelPatterns []string          `yaml:"UninterestingLabelPatterns"`
+	InterestingLabelPatterns   []string          `yaml:"InterestingLabelPatterns"`
+	ApplyLabelToUninteresting  string            `yaml:"ApplyLabelToUninteresting"`
+	ApplyLabelOnTouch          string            `yaml:"ApplyLabelOnTouch"`
+	LabelColors                map[string]string `yaml:"LabelColors"`
 
 	uninterLabelRegexps []*regexp.Regexp
 	interLabelRegexps   []*regexp.Regexp
@@ -159,7 +161,17 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 				l == "INBOX") {
 			continue
 		}
-		labelsToShow = append(labelsToShow, l)
+		preColor := ""
+		if color, ok := h.conf.LabelColors[l]; ok {
+			colorCode, ok := util.Colors[color]
+			if ok {
+				preColor = colorCode + util.Bold
+			} else {
+				fmt.Printf("'%s' is not a valid color\n", color)
+				os.Exit(1)
+			}
+		}
+		labelsToShow = append(labelsToShow, preColor+l+util.ResetC)
 	}
 
 	fmt.Printf("- %s [%s] %s\n", from, strings.Join(labelsToShow, ", "), subject)

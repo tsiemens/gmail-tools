@@ -12,3 +12,6 @@ InterestingLabelPatterns:
 ApplyLabelOnTouch: xCliTouched
 ApplyLabelToUninteresting: xCliUninteresting
 ApplyLabelToInteresting: xCliInteresting
+
+LabelColors:
+   MyLabel: blue
