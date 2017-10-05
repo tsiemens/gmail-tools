@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	// "github.com/spf13/viper"
 
+	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
@@ -69,6 +70,12 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	prnt.NoHumanOnly = BatchMode
+	prnt.DebugMode = util.DebugMode
+	if Verbose {
+		prnt.LevelEnabled = prnt.VerboseLevel
+	}
+
 	// if cfgFile != "" {
 	//	 // Use config file from the flag.
 	//	 viper.SetConfigFile(cfgFile)

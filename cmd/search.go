@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
-	"github.com/tsiemens/gmail-tools/util"
+	"github.com/tsiemens/gmail-tools/prnt"
 )
 
 var searchLabels []string
@@ -69,7 +69,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
-	util.Debugf("Debug: Query returned %d mesages\n", len(msgs))
+	prnt.LPrintf(prnt.Debug, "Debug: Query returned %d mesages\n", len(msgs))
 
 	hasLoadedMsgDetails := false
 
@@ -88,10 +88,10 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if len(msgs) == 0 {
-		fmt.Println("Query matched no messages")
+		prnt.HPrintln(prnt.Always, "Query matched no messages")
 		return
 	}
-	fmt.Printf("Query matched %d messages\n", len(msgs))
+	prnt.HPrintf(prnt.Always, "Query matched %d messages\n", len(msgs))
 
 	if !searchQuiet && MaybeConfirmFromInput("Show messages?", true) {
 		if searchPrintIdsOnly {
@@ -119,7 +119,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 				if err != nil {
 					log.Fatalf("Failed to touch messages: %s\n", err)
 				} else {
-					fmt.Println("Messages marked touched")
+					prnt.HPrintln(prnt.Quietable, "Messages marked touched")
 				}
 			}
 		}
