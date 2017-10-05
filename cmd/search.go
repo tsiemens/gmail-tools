@@ -17,6 +17,7 @@ var searchQuiet = false
 var searchTouch = false
 var searchInteresting = false
 var searchUninteresting = false
+var searchPrintIdsOnly = false
 
 func touchMessages(msgs []*gm.Message, gHelper *GmailHelper, conf *Config) error {
 	touchLabelId := gHelper.LabelIdFromName(conf.ApplyLabelOnTouch)
@@ -92,21 +93,28 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 	fmt.Printf("Query matched %d messages\n", len(msgs))
 
-	if !searchQuiet && util.ConfirmFromInput("Show messages?", true) {
-		if !hasLoadedMsgDetails {
-			msgs, err = gHelper.LoadDetailedMessages(msgs, LabelsAndPayload)
-			if err != nil {
-				log.Fatalf("%v\n", err)
+	if !searchQuiet && MaybeConfirmFromInput("Show messages?", true) {
+		if searchPrintIdsOnly {
+			for _, msg := range msgs {
+				fmt.Println(msg.Id)
 			}
+		} else {
+			if !hasLoadedMsgDetails {
+				msgs, err = gHelper.LoadDetailedMessages(msgs, LabelsAndPayload)
+				if err != nil {
+					log.Fatalf("%v\n", err)
+				}
+				hasLoadedMsgDetails = true
+			}
+			gHelper.PrintMessagesByCategory(msgs)
 		}
-		gHelper.PrintMessagesByCategory(msgs)
 	}
 
 	if searchTouch {
 		if DryRun {
 			fmt.Println("Skipping touching messages (--dry provided)")
 		} else {
-			if util.ConfirmFromInput("Mark messages touched?", false) {
+			if MaybeConfirmFromInput("Mark messages touched?", false) {
 				err := touchMessages(msgs, gHelper, conf)
 				if err != nil {
 					log.Fatalf("Failed to touch messages: %s\n", err)
@@ -139,5 +147,7 @@ func init() {
 		"Filter results by interesting messages")
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,
 		"Filter results by uninteresting messages")
+	searchCmd.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
+		"Only prints out the message IDs (does not prompt)")
 	addDryFlag(searchCmd)
 }

@@ -12,6 +12,14 @@ import (
 )
 
 var Verbose = false
+var BatchMode = false
+
+func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
+	if BatchMode {
+		return defaultVal
+	}
+	return util.ConfirmFromInput(msg, defaultVal)
+}
 
 var cfgFile string
 
@@ -49,6 +57,10 @@ func init() {
 
 	RootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false,
 		"Print verbose output")
+
+	RootCmd.PersistentFlags().BoolVarP(&BatchMode, "batch", "b", false,
+		"Run script in batch mode. This will automatically use the default for "+
+			"any prompt, and will not print colors or extraneous output")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
