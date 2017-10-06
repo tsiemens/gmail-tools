@@ -18,11 +18,17 @@ const (
 	ConfigYamlFileName = "config.yaml"
 
 	caseIgnore = "(?i)"
+)
 
+// Format values
+const (
+	// Default
+	messageFormatFull = "full"
 	// Labels only
 	messageFormatMinimal = "minimal"
 	// Labels and payload data
 	messageFormatMetadata = "metadata"
+	messageFormatRaw      = "raw"
 )
 
 type Config struct {
@@ -264,6 +270,10 @@ func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
 	fmt.Print("\n")
 
 	return detailedMsgs, nil
+}
+
+func (h *GmailHelper) LoadMessage(id string) (*gm.Message, error) {
+	return h.srv.Users.Messages.Get(h.User, id).Do()
 }
 
 func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly bool,
