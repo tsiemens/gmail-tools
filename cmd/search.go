@@ -96,7 +96,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if !searchQuiet && MaybeConfirmFromInput("Show messages?", true) {
 		if searchPrintIdsOnly {
 			for _, msg := range msgs {
-				fmt.Println(msg.Id)
+				fmt.Printf("%s,%s\n", msg.Id, msg.ThreadId)
 			}
 		} else {
 			if !hasLoadedMsgDetails {
@@ -111,18 +111,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if searchTouch {
-		if DryRun {
-			fmt.Println("Skipping touching messages (--dry provided)")
-		} else {
-			if MaybeConfirmFromInput("Mark messages touched?", false) {
-				err := touchMessages(msgs, gHelper, conf)
-				if err != nil {
-					log.Fatalf("Failed to touch messages: %s\n", err)
-				} else {
-					prnt.HPrintln(prnt.Quietable, "Messages marked touched")
-				}
-			}
-		}
+		maybeTouchMessages(msgs, gHelper)
 	}
 }
 
@@ -148,6 +137,6 @@ func init() {
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,
 		"Filter results by uninteresting messages")
 	searchCmd.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
-		"Only prints out the message IDs (does not prompt)")
+		"Only prints out only messageId,threadId (does not prompt)")
 	addDryFlag(searchCmd)
 }

@@ -1,45 +1,70 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
-	// "os"
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"strings"
 
-	// gm "google.golang.org/api/gmail/v1"
+	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/spf13/cobra"
+
 	"github.com/tsiemens/gmail-tools/api"
-	// "github.com/tsiemens/gmail-tools/prnt"
+	"github.com/tsiemens/gmail-tools/prnt"
 )
 
+var showTouch = false
+var showHeadersOnly = false
+var showBrief = false
+
+func decodePartBody(part *gm.MessagePart) string {
+	data := part.Body.Data
+	decoder := base64.NewDecoder(base64.URLEncoding, strings.NewReader(data))
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(decoder)
+	b := buf.Bytes()
+	return string(b[:])
+}
+
 func runShowCmd(cmd *cobra.Command, args []string) {
+	if showHeadersOnly && showBrief {
+		prnt.StderrLog.Fatalln("-b and -H are mutually exclusive")
+	}
+
 	msgId := args[0]
+	if msgId == "" {
+		prnt.StderrLog.Fatalln("Invalid msgId ''")
+	}
 
 	conf := LoadConfig()
-	srv := api.NewGmailClient(api.ReadScope)
+	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
 	msg, err := gHelper.LoadMessage(msgId)
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		prnt.StderrLog.Fatalf("%v\n", err)
 	}
 
-	// gHelper.PrintMessage(msg)
-	for _, hdr := range msg.Payload.Headers {
-		fmt.Printf("%s: %s\n", hdr.Name, hdr.Value)
+	if showBrief {
+		gHelper.PrintMessage(msg)
+	} else {
+		for _, hdr := range msg.Payload.Headers {
+			fmt.Printf("%s: %s\n", hdr.Name, hdr.Value)
+		}
+
+		if !showHeadersOnly {
+			fmt.Println(decodePartBody(msg.Payload))
+			for _, part := range msg.Payload.Parts {
+				// For multipart messages
+				fmt.Println(decodePartBody(part))
+			}
+		}
 	}
 
-	str := msg.Payload.Body.Data
-	decoder := base64.NewDecoder(base64.URLEncoding, strings.NewReader(str))
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(decoder)
-	b := buf.Bytes()
-	data := string(b[:])
-
-	fmt.Println(data)
+	if showTouch {
+		maybeTouchMessages([]*gm.Message{msg}, gHelper)
+	}
 }
 
 var showCmd = &cobra.Command{
@@ -52,4 +77,13 @@ var showCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(showCmd)
+
+	showCmd.Flags().BoolVarP(&showTouch, "touch", "t", false,
+		"Mark message as touched")
+	showCmd.Flags().BoolVarP(&showHeadersOnly, "headers-only", "H", false,
+		"Don't print the message body")
+	showCmd.Flags().BoolVarP(&showBrief, "brief", "b", false,
+		"Print only a brief summary of the message")
+	addDryFlag(showCmd)
+	addAssumeYesFlag(showCmd)
 }

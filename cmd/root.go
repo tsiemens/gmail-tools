@@ -16,6 +16,9 @@ var Verbose = false
 var BatchMode = false
 
 func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
+	if AssumeYes {
+		return true
+	}
 	if BatchMode {
 		return defaultVal
 	}
@@ -59,7 +62,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false,
 		"Print verbose output")
 
-	RootCmd.PersistentFlags().BoolVarP(&BatchMode, "batch", "b", false,
+	RootCmd.PersistentFlags().BoolVar(&BatchMode, "batch", false,
 		"Run script in batch mode. This will automatically use the default for "+
 			"any prompt, and will not print colors or extraneous output")
 

@@ -3,7 +3,10 @@ package prnt
 import (
 	"fmt"
 	"log"
+	"os"
 )
+
+var StderrLog = log.New(os.Stderr, "", 0)
 
 type PrintType int
 
