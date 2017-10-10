@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tsiemens/gmail-tools/api"
+	_ "github.com/tsiemens/gmail-tools/filter"
 	"github.com/tsiemens/gmail-tools/prnt"
 )
 
