@@ -7,6 +7,7 @@ import (
 	"github.com/golang-collections/collections/stack"
 
 	"github.com/tsiemens/gmail-tools/prnt"
+	"github.com/tsiemens/gmail-tools/util"
 )
 
 type FilterElement struct {
@@ -32,17 +33,17 @@ func NewSubElemFilterElement(
 }
 
 func (e *FilterElement) checkConsistency() {
-	if !((e.FilterStr == "" && len(e.SubElems) > 0) ||
-		(e.FilterStr != "" && len(e.SubElems) == 0)) {
-		prnt.StderrLog.Panicln("Found inconsistent FilterStr/SubElems")
-	}
-	if !(e.Delims == "" || len(e.Delims) == 2) {
-		prnt.StderrLog.Panicf("Invalid demims: '%s'\n", e.Delims)
-	}
+	util.Assertf(
+		!(e.FilterStr != "" && len(e.SubElems) > 0),
+		"Found inconsistent FilterStr (\"%s\")/SubElems (%v)\n",
+		e.FilterStr, e.SubElems)
+	util.Assertf(e.Delims == "" || len(e.Delims) == 2,
+		"Invalid demims: '%s'\n", e.Delims)
 }
 
 func (e *FilterElement) Equals(other *FilterElement) bool {
-	if other.FilterStr != e.FilterStr ||
+	if other == nil ||
+		other.FilterStr != e.FilterStr ||
 		other.Delims != e.Delims ||
 		other.PreWs != e.PreWs ||
 		other.PostWs != e.PostWs ||

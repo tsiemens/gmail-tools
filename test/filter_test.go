@@ -86,13 +86,23 @@ func fes(ses ...*f.FilterElement) []*f.FilterElement {
 	return elms
 }
 
+func assertFiltersEqual(t *testing.T, actual, exp *f.FilterElement) {
+	if (exp == nil && actual != nil) ||
+		(exp != nil && actual == nil) {
+		t.Fatalf("nil/non-nil values don't match. Actual: %v, Expected: %v",
+			actual, exp)
+	} else if exp != nil && !exp.Equals(actual) {
+		t.Fatalf("\n%+v (actual) !=\n%+v (expected)", actual, exp)
+	}
+}
+
 func checkParse(t *testing.T, filterStr string, exp *f.FilterElement) {
 	fmt.Printf("parsing \"%s\"\n", filterStr)
 	elm, err := f.ParseElement(filterStr)
 	if err != nil {
 		t.Fatalf("Error parsing \"%s\": %v\n", filterStr, err)
-	} else if !elm.Equals(exp) {
-		t.Fatalf("\n%+v (actual) !=\n%+v (exp)\n", elm, exp)
+	} else {
+		assertFiltersEqual(t, elm, exp)
 	}
 }
 
