@@ -14,6 +14,7 @@ import (
 
 var Verbose = false
 var BatchMode = false
+var EmailToAssert string
 
 func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
 	if AssumeYes {
@@ -66,9 +67,9 @@ func init() {
 		"Run script in batch mode. This will automatically use the default for "+
 			"any prompt, and will not print colors or extraneous output")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	// RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().StringVar(&EmailToAssert, "assert-email", "",
+		"check that the authorized account matches this email address, before taking"+
+			"any action")
 }
 
 // initConfig reads in config file and ENV variables if set.

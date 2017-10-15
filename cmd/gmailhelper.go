@@ -11,8 +11,8 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 	"gopkg.in/yaml.v2"
 
-	"github.com/tsiemens/gmail-tools/util"
 	"github.com/tsiemens/gmail-tools/prnt"
+	"github.com/tsiemens/gmail-tools/util"
 )
 
 const (
@@ -92,7 +92,26 @@ type GmailHelper struct {
 }
 
 func NewGmailHelper(srv *gm.Service, user string, conf *Config) *GmailHelper {
-	return &GmailHelper{User: user, srv: srv, conf: conf}
+	helper := &GmailHelper{User: user, srv: srv, conf: conf}
+	emailAddr, err := helper.GetEmailAddress()
+	if err != nil {
+		prnt.StderrLog.Fatalln("Failed to get account email", err)
+	}
+	prnt.LPrintln(prnt.Verbose, "Account email:", emailAddr)
+	// If the user has provided the --assert-email option, perform that check.
+	if EmailToAssert != "" && emailAddr != EmailToAssert {
+		prnt.StderrLog.Fatalf("Authorized account for %s did not match %s\n",
+			emailAddr, EmailToAssert)
+	}
+	return helper
+}
+
+func (h *GmailHelper) GetEmailAddress() (string, error) {
+	r, err := h.srv.Users.GetProfile(h.User).Do()
+	if err != nil {
+		return "", err
+	}
+	return r.EmailAddress, nil
 }
 
 func (h *GmailHelper) loadLabels() error {
@@ -256,7 +275,7 @@ func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
 
 	var detailedMsgs []*gm.Message
 
-   printLvl := prnt.Quietable
+	printLvl := prnt.Quietable
 	prnt.HPrint(printLvl, "Loading message details ")
 	for i, msg := range msgs {
 		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))
