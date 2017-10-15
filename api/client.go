@@ -52,6 +52,11 @@ var ModifyScope = &ScopeProfile{
 	CredFile: "gmailcli_modify.json",
 }
 
+var FiltersScope = &ScopeProfile{
+	Scopes:   []string{gmail.GmailMetadataScope, gmail.GmailSettingsBasicScope},
+	CredFile: "gmailcli_filters.json",
+}
+
 // tokenCacheFile generates credential file ~/.credentials/gmailcli.json
 // It returns the generated credential filepath
 func tokenCacheFile(scope *ScopeProfile) (string, error) {

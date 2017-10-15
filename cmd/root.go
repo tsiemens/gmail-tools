@@ -27,6 +27,16 @@ func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
 	return util.ConfirmFromInput(msg, defaultVal)
 }
 
+func MaybeConfirmFromInputLong(msg string) bool {
+	if AssumeYes {
+		return true
+	}
+	if BatchMode {
+		return false
+	}
+	return util.ConfirmFromInputLong(msg)
+}
+
 var cfgFile string
 
 func cmdName() string {

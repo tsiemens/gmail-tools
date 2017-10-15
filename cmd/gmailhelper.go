@@ -554,3 +554,11 @@ func (h *GmailHelper) PrintFilter(filter *gm.Filter) {
 func (h *GmailHelper) PrintFilterDiff(oldFilter, newFilter *gm.Filter) {
 	h.printFilterAndMaybeDiff(oldFilter, newFilter)
 }
+
+func (h *GmailHelper) CreateFilter(filter *gm.Filter) (*gm.Filter, error) {
+	return h.srv.Users.Settings.Filters.Create(h.User, filter).Do()
+}
+
+func (h *GmailHelper) DeleteFilter(id string) error {
+	return h.srv.Users.Settings.Filters.Delete(h.User, id).Do()
+}

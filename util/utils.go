@@ -57,6 +57,27 @@ func ConfirmFromInput(msg string, defaultYes bool) bool {
 	}
 }
 
+func ConfirmFromInputLong(msg string) bool {
+	for {
+		fmt.Printf("%s [No/yes]: ", msg)
+		stdin := bufio.NewReader(os.Stdin)
+		reply, err := stdin.ReadString('\n')
+		if err != nil {
+			log.Fatalf("Unable to read input: %v", err)
+		}
+
+		if strings.HasPrefix(strings.ToLower(reply), "y") {
+			if strings.TrimSpace(strings.ToLower(reply)) == "yes" {
+				return true
+			} else {
+				fmt.Println("Whole word 'yes' is required")
+			}
+		} else {
+			return false
+		}
+	}
+}
+
 func HomeDirAndFile(dir, fname string) (string, error) {
 	usr, err := user.Current()
 	if err != nil {
