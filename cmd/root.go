@@ -13,6 +13,7 @@ import (
 )
 
 var Verbose = false
+var Quiet = false
 var BatchMode = false
 var EmailToAssert string
 
@@ -63,6 +64,9 @@ func init() {
 	RootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false,
 		"Print verbose output")
 
+	RootCmd.PersistentFlags().BoolVarP(&Quiet, "quiet", "q", false,
+		"Don't print unecessary output")
+
 	RootCmd.PersistentFlags().BoolVar(&BatchMode, "batch", false,
 		"Run script in batch mode. This will automatically use the default for "+
 			"any prompt, and will not print colors or extraneous output")
@@ -76,8 +80,13 @@ func init() {
 func initConfig() {
 	prnt.NoHumanOnly = BatchMode
 	prnt.DebugMode = util.DebugMode
+	if Quiet && Verbose {
+		prnt.StderrLog.Fatalln("--verbose and --quiet are mutually exclusive")
+	}
 	if Verbose {
 		prnt.LevelEnabled = prnt.VerboseLevel
+	} else if Quiet {
+		prnt.LevelEnabled = prnt.AlwaysLevel
 	}
 
 	// if cfgFile != "" {

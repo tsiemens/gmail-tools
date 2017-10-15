@@ -13,7 +13,6 @@ import (
 )
 
 var searchLabels []string
-var searchQuiet = false
 var searchTouch = false
 var searchInteresting = false
 var searchUninteresting = false
@@ -50,7 +49,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	// If the quiet label is set, then we will never need the payload during the
 	// command execution.
 	var detailLevel MessageDetailLevel
-	if searchQuiet {
+	if Quiet {
 		detailLevel = LabelsOnly
 	} else {
 		detailLevel = LabelsAndPayload
@@ -93,7 +92,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 	prnt.HPrintf(prnt.Always, "Query matched %d messages\n", len(msgs))
 
-	if !searchQuiet && MaybeConfirmFromInput("Show messages?", true) {
+	if !Quiet && MaybeConfirmFromInput("Show messages?", true) {
 		if searchPrintIdsOnly {
 			for _, msg := range msgs {
 				fmt.Printf("%s,%s\n", msg.Id, msg.ThreadId)
@@ -128,8 +127,6 @@ func init() {
 
 	searchCmd.Flags().StringArrayVarP(&searchLabels, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")
-	searchCmd.Flags().BoolVarP(&searchQuiet, "quiet", "q", false,
-		"Don't print searched messages")
 	searchCmd.Flags().BoolVarP(&searchTouch, "touch", "t", false,
 		"Apply 'touched' label from ~/.gmailcli/config.yaml")
 	searchCmd.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,

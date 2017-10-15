@@ -100,6 +100,7 @@ var Colors map[string]string
 func init() {
 	Colors = map[string]string{
 		"bold":    bold,
+		"reset":   resetC,
 		"red":     fgRed,
 		"green":   fgGreen,
 		"yellow":  fgYellow,
@@ -124,4 +125,8 @@ func Fg(colorKey string) string {
 		log.Fatalf("Color %s is invalid", colorKey)
 	}
 	return ""
+}
+
+func Colorize(str, colorKey string) string {
+	return Fg(colorKey) + str + Fg("reset")
 }

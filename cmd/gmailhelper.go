@@ -114,6 +114,8 @@ func (h *GmailHelper) GetEmailAddress() (string, error) {
 	return r.EmailAddress, nil
 }
 
+// ---------- Message methods ----------------
+
 func (h *GmailHelper) loadLabels() error {
 	util.Debugln("Loading labels")
 	r, err := h.srv.Users.Labels.List(h.User).Do()
@@ -142,13 +144,17 @@ func (h *GmailHelper) LabelName(lblId string) string {
 	return h.labels[lblId]
 }
 
-func (h *GmailHelper) messageLabelNames(m *gm.Message) []string {
+func (h *GmailHelper) labelNames(ids []string) []string {
 	h.requireLabels()
 	var lNames []string
-	for _, lId := range m.LabelIds {
+	for _, lId := range ids {
 		lNames = append(lNames, h.labels[lId])
 	}
 	return lNames
+}
+
+func (h *GmailHelper) messageLabelNames(m *gm.Message) []string {
+	return h.labelNames(m.LabelIds)
 }
 
 var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
@@ -421,4 +427,130 @@ func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
 		return Uninteresting
 	}
 	return MaybeInteresting
+}
+
+// ---------- Filter methods ----------------
+func (h *GmailHelper) GetFilters() ([]*gm.Filter, error) {
+	r, err := h.srv.Users.Settings.Filters.List(h.User).Do()
+	if err != nil {
+		return nil, err
+	}
+	return r.Filter, nil
+}
+
+func (h *GmailHelper) MatchesFilter(regex *regexp.Regexp, filter *gm.Filter) bool {
+	criteriaStr := fmt.Sprintf("%+v", filter.Criteria)
+	return regex.MatchString(criteriaStr)
+}
+
+func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
+	isDiff := (newFilter != nil)
+	prntT := prnt.Always
+	if isDiff {
+		prntT = prnt.Quietable
+	}
+
+	prnt.LPrintf(prntT, "Filter %s\n", filter.Id)
+
+	getCriteriaMap := func(criteria *gm.FilterCriteria) map[string]string {
+		cm := map[string]string{}
+		if criteria.ExcludeChats {
+			cm["ExcludeChats"] = fmt.Sprintf("%v", criteria.ExcludeChats)
+		}
+		if criteria.From != "" {
+			cm["From"] = fmt.Sprintf("%v", criteria.From)
+		}
+		if criteria.HasAttachment {
+			cm["HasAttachment"] = fmt.Sprintf("%v", criteria.HasAttachment)
+		}
+		if criteria.NegatedQuery != "" {
+			cm["NegatedQuery"] = fmt.Sprintf("%v", criteria.NegatedQuery)
+		}
+		if criteria.Query != "" {
+			cm["Query"] = fmt.Sprintf("%v", criteria.Query)
+		}
+		if criteria.Size != 0 {
+			cm["Size"] = fmt.Sprintf("%v", criteria.Size)
+		}
+		if criteria.SizeComparison != "" {
+			cm["SizeComparison"] = fmt.Sprintf("%v", criteria.SizeComparison)
+		}
+		if criteria.Subject != "" {
+			cm["Subject"] = fmt.Sprintf("%v", criteria.Subject)
+		}
+		if criteria.To != "" {
+			cm["To"] = fmt.Sprintf("%v", criteria.To)
+		}
+		return cm
+	}
+
+	critMap := getCriteriaMap(filter.Criteria)
+	var newCritMap map[string]string
+	if newFilter != nil {
+		newCritMap = getCriteriaMap(newFilter.Criteria)
+	}
+
+	// Make a set of all keys that need to be shown
+	allCriteriaKeys := map[string]byte{}
+	for k, _ := range critMap {
+		allCriteriaKeys[k] = 255
+	}
+	if newCritMap != nil {
+		for k, _ := range newCritMap {
+			allCriteriaKeys[k] = 255
+		}
+	}
+
+	for k, _ := range allCriteriaKeys {
+		oldValStr := "<None>"
+		if v, ok := critMap[k]; ok {
+			oldValStr = v
+		}
+		oldValLine := fmt.Sprintf("  %s: %s", k, oldValStr)
+		var newValLine string
+
+		if isDiff {
+			newValStr := "<None>"
+			if v, ok := newCritMap[k]; ok {
+				newValStr = v
+			}
+			if newValStr != oldValStr {
+				// Print the lines as a diff
+				oldValLine = prnt.Colorize("-"+oldValLine, "red")
+				newValLine = prnt.Colorize(fmt.Sprintf("+  %s: %s", k, newValStr),
+					"green")
+			}
+		}
+
+		prnt.LPrintln(prntT, oldValLine)
+		if newValLine != "" {
+			prnt.LPrintln(prntT, newValLine)
+		}
+	}
+
+	// Print all actions to apply the filter
+	actionsMap := map[string]string{}
+	if len(filter.Action.AddLabelIds) > 0 {
+		actionsMap["AddLabelIds"] =
+			strings.Join(h.labelNames(filter.Action.AddLabelIds), ", ")
+	}
+	if len(filter.Action.RemoveLabelIds) > 0 {
+		actionsMap["RemoveLabelIds"] =
+			strings.Join(h.labelNames(filter.Action.RemoveLabelIds), ", ")
+	}
+	if filter.Action.Forward != "" {
+		actionsMap["Forward"] = filter.Action.Forward
+	}
+
+	for k, v := range actionsMap {
+		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, v))
+	}
+}
+
+func (h *GmailHelper) PrintFilter(filter *gm.Filter) {
+	h.printFilterAndMaybeDiff(filter, nil)
+}
+
+func (h *GmailHelper) PrintFilterDiff(oldFilter, newFilter *gm.Filter) {
+	h.printFilterAndMaybeDiff(oldFilter, newFilter)
 }
