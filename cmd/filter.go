@@ -97,8 +97,13 @@ func runReplaceFilterCmd(cmd *cobra.Command, args []string) {
 		if regexPat.MatchString(attrStr) {
 			matchedFilters = append(matchedFilters, filter)
 			updatedFilter := copyFilterAndCriteria(filter)
-			SetFieldAttrFromString(updatedFilter.Criteria, replaceFilterField,
-				regexPat.ReplaceAllString(attrStr, replStr))
+			replacementStr := regexPat.ReplaceAllString(attrStr, replStr)
+			err := SetFieldAttrFromString(updatedFilter.Criteria, replaceFilterField,
+				replacementStr)
+			if err != nil {
+				prnt.StderrLog.Fatalf("Failed to do value replace on %s with \"%s\"\n",
+					replaceFilterField, replacementStr)
+			}
 			replacementFilters = append(replacementFilters, updatedFilter)
 		}
 	}

@@ -432,23 +432,9 @@ func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
 }
 
 // ---------- Filter methods ----------------
+
+// Initialized in init()
 var CriteriaAttrs []string
-
-func init() {
-	crit := gm.FilterCriteria{}
-	critV := reflect.ValueOf(crit)
-	critType := reflect.ValueOf(crit).Type()
-
-	CriteriaAttrs = make([]string, 0, critV.NumField()-2)
-	for i := 0; i < critV.NumField(); i++ {
-		switch critV.Field(i).Interface().(type) {
-		case []string:
-			// Ignore these attrs. ForceSendFields and NullFields
-		default:
-			CriteriaAttrs = append(CriteriaAttrs, critType.Field(i).Name)
-		}
-	}
-}
 
 func GetFieldAttr(x interface{}, attrName string) interface{} {
 	// x must be a Ptr or interface
@@ -511,35 +497,15 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	}
 
 	prnt.LPrintf(prntT, "Filter %s\n", filter.Id)
+	defaultCrit := &gm.FilterCriteria{}
 
 	getCriteriaMap := func(criteria *gm.FilterCriteria) map[string]string {
 		cm := map[string]string{}
-		if criteria.ExcludeChats {
-			cm["ExcludeChats"] = fmt.Sprintf("%v", criteria.ExcludeChats)
-		}
-		if criteria.From != "" {
-			cm["From"] = fmt.Sprintf("%v", criteria.From)
-		}
-		if criteria.HasAttachment {
-			cm["HasAttachment"] = fmt.Sprintf("%v", criteria.HasAttachment)
-		}
-		if criteria.NegatedQuery != "" {
-			cm["NegatedQuery"] = fmt.Sprintf("%v", criteria.NegatedQuery)
-		}
-		if criteria.Query != "" {
-			cm["Query"] = fmt.Sprintf("%v", criteria.Query)
-		}
-		if criteria.Size != 0 {
-			cm["Size"] = fmt.Sprintf("%v", criteria.Size)
-		}
-		if criteria.SizeComparison != "" {
-			cm["SizeComparison"] = fmt.Sprintf("%v", criteria.SizeComparison)
-		}
-		if criteria.Subject != "" {
-			cm["Subject"] = fmt.Sprintf("%v", criteria.Subject)
-		}
-		if criteria.To != "" {
-			cm["To"] = fmt.Sprintf("%v", criteria.To)
+		for _, critAttr := range CriteriaAttrs {
+			attrValStr := GetFieldAttrString(criteria, critAttr)
+			if GetFieldAttrString(defaultCrit, critAttr) != attrValStr {
+				cm[critAttr] = attrValStr
+			}
 		}
 		return cm
 	}
@@ -561,19 +527,26 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		}
 	}
 
-	for k, _ := range allCriteriaKeys {
-		oldValStr := "<None>"
-		if v, ok := critMap[k]; ok {
-			oldValStr = v
+	getValDisplayStr := func(critMap map[string]string, critName string) string {
+		var valStr string
+		if v, ok := critMap[critName]; ok {
+			valStr = v
+		} else {
+			valStr = GetFieldAttrString(defaultCrit, critName)
+			if valStr == "" {
+				valStr = "<None>"
+			}
 		}
+		return valStr
+	}
+
+	for k, _ := range allCriteriaKeys {
+		oldValStr := getValDisplayStr(critMap, k)
 		oldValLine := fmt.Sprintf("  %s: %s", k, oldValStr)
 		var newValLine string
 
 		if isDiff {
-			newValStr := "<None>"
-			if v, ok := newCritMap[k]; ok {
-				newValStr = v
-			}
+			newValStr := getValDisplayStr(newCritMap, k)
 			if newValStr != oldValStr {
 				// Print the lines as a diff
 				oldValLine = prnt.Colorize("-"+oldValLine, "red")
@@ -621,4 +594,20 @@ func (h *GmailHelper) CreateFilter(filter *gm.Filter) (*gm.Filter, error) {
 
 func (h *GmailHelper) DeleteFilter(id string) error {
 	return h.srv.Users.Settings.Filters.Delete(h.User, id).Do()
+}
+
+func init() {
+	crit := gm.FilterCriteria{}
+	critV := reflect.ValueOf(crit)
+	critType := reflect.ValueOf(crit).Type()
+
+	CriteriaAttrs = make([]string, 0, critV.NumField()-2)
+	for i := 0; i < critV.NumField(); i++ {
+		switch critV.Field(i).Interface().(type) {
+		case []string:
+			// Ignore these attrs. ForceSendFields and NullFields
+		default:
+			CriteriaAttrs = append(CriteriaAttrs, critType.Field(i).Name)
+		}
+	}
 }
