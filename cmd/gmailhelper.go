@@ -5,7 +5,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
@@ -430,6 +432,64 @@ func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
 }
 
 // ---------- Filter methods ----------------
+var CriteriaAttrs []string
+
+func init() {
+	crit := gm.FilterCriteria{}
+	critV := reflect.ValueOf(crit)
+	critType := reflect.ValueOf(crit).Type()
+
+	CriteriaAttrs = make([]string, 0, critV.NumField()-2)
+	for i := 0; i < critV.NumField(); i++ {
+		switch critV.Field(i).Interface().(type) {
+		case []string:
+			// Ignore these attrs. ForceSendFields and NullFields
+		default:
+			CriteriaAttrs = append(CriteriaAttrs, critType.Field(i).Name)
+		}
+	}
+}
+
+func GetFieldAttr(x interface{}, attrName string) interface{} {
+	// x must be a Ptr or interface
+	v := reflect.ValueOf(x).Elem()
+	return v.FieldByName(attrName).Interface()
+}
+
+func GetFieldAttrString(x interface{}, attrName string) string {
+	val := GetFieldAttr(x, attrName)
+	return fmt.Sprintf("%v", val)
+}
+
+func SetFieldAttr(x interface{}, attrName string, val interface{}) {
+	// x must be a Ptr or interface
+	v := reflect.ValueOf(x).Elem()
+	v.FieldByName(attrName).Set(reflect.ValueOf(val))
+}
+
+func SetFieldAttrFromString(x interface{}, attrName string, valStr string) error {
+	fieldAttr := GetFieldAttr(x, attrName)
+	switch fieldAttr.(type) {
+	case string:
+		SetFieldAttr(x, attrName, valStr)
+	case bool:
+		b, err := strconv.ParseBool(valStr)
+		if err != nil {
+			return err
+		}
+		SetFieldAttr(x, attrName, b)
+	case int64:
+		i, err := strconv.ParseInt(valStr, 10, 64)
+		if err != nil {
+			return err
+		}
+		SetFieldAttr(x, attrName, i)
+	default:
+		util.Assert(false, "Unsupported type for attr:", attrName)
+	}
+	return nil
+}
+
 func (h *GmailHelper) GetFilters() ([]*gm.Filter, error) {
 	r, err := h.srv.Users.Settings.Filters.List(h.User).Do()
 	if err != nil {
