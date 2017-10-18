@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
@@ -25,7 +25,7 @@ type Archiver struct {
 
 func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
 	if srv == nil || conf == nil || helper == nil {
-		log.Fatalln("Internal error creating Archiver: ", srv, conf, helper)
+		prnt.StderrLog.Fatalln("Internal error creating Archiver: ", srv, conf, helper)
 	}
 	return &Archiver{srv: srv, conf: conf, helper: helper}
 }
@@ -38,7 +38,7 @@ func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
 	msgs, err := a.helper.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
 		true, !archiveRead, detailLevel)
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		prnt.StderrLog.Fatalf("%v\n", err)
 	}
 
 	var msgsToArchive []*gm.Message
@@ -72,12 +72,12 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 
 	srv := api.NewGmailClient(api.ModifyScope)
 
-	fmt.Print("Fetching inbox... ")
+	prnt.HPrint(prnt.Always, "Fetching inbox... ")
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
 	arch := NewArchiver(srv, conf, gHelper)
 	msgsToArchive := arch.LoadMsgsToArchive()
-	fmt.Print("done\n")
+	prnt.HPrint(prnt.Always, "done\n")
 
 	if len(msgsToArchive) > 0 {
 		if Verbose {
@@ -92,12 +92,12 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 		}
 
 		if DryRun {
-			fmt.Println("Skipping committing changes (--dry provided)")
+			prnt.LPrintln(prnt.Quietable, "Skipping committing changes (--dry provided)")
 		} else {
 			if util.ConfirmFromInput("Archive these?", false) {
 				err := arch.ArchiveMessages(msgsToArchive)
 				if err != nil {
-					log.Fatalf("Failed to archive messages: %s\n", err)
+					prnt.StderrLog.Fatalf("Failed to archive messages: %s\n", err)
 				} else {
 					fmt.Println("Messages archived")
 				}

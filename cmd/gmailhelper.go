@@ -283,7 +283,7 @@ func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
 
 	var detailedMsgs []*gm.Message
 
-	printLvl := prnt.Quietable
+	printLvl := prnt.Always
 	prnt.HPrint(printLvl, "Loading message details ")
 	for i, msg := range msgs {
 		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))

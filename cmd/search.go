@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
-	"os"
-
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/spf13/cobra"
@@ -29,8 +25,7 @@ func touchMessages(msgs []*gm.Message, gHelper *GmailHelper, conf *Config) error
 
 func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchInteresting && searchUninteresting {
-		fmt.Println("-u and -i options are mutually exclusive")
-		os.Exit(1)
+		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
 
 	query := ""
@@ -42,8 +37,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if query == "" {
-		fmt.Println("No query provided")
-		os.Exit(1)
+		prnt.StderrLog.Println("No query provided")
 	}
 
 	// If the quiet label is set, then we will never need the payload during the
@@ -57,8 +51,8 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	conf := LoadConfig()
 	if searchTouch && conf.ApplyLabelOnTouch == "" {
-		fmt.Printf("No ApplyLabelOnTouch property found in %s\n", conf.configFile)
-		os.Exit(1)
+		prnt.StderrLog.Fatalf("No ApplyLabelOnTouch property found in %s\n",
+			conf.configFile)
 	}
 
 	srv := api.NewGmailClient(api.ModifyScope)
@@ -66,7 +60,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	msgs, err := gHelper.QueryMessages(query, false, false, IdsOnly)
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		prnt.StderrLog.Fatalf("%v\n", err)
 	}
 	prnt.LPrintf(prnt.Debug, "Debug: Query returned %d mesages\n", len(msgs))
 
@@ -95,13 +89,13 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if !Quiet && MaybeConfirmFromInput("Show messages?", true) {
 		if searchPrintIdsOnly {
 			for _, msg := range msgs {
-				fmt.Printf("%s,%s\n", msg.Id, msg.ThreadId)
+				prnt.Printf("%s,%s\n", msg.Id, msg.ThreadId)
 			}
 		} else {
 			if !hasLoadedMsgDetails {
 				msgs, err = gHelper.LoadDetailedMessages(msgs, LabelsAndPayload)
 				if err != nil {
-					log.Fatalf("%v\n", err)
+					prnt.StderrLog.Fatalf("%v\n", err)
 				}
 				hasLoadedMsgDetails = true
 			}
