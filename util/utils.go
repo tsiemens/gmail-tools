@@ -9,6 +9,8 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+
+	"github.com/tsiemens/gmail-tools/prnt"
 )
 
 const (
@@ -95,4 +97,17 @@ func RequiredHomeDirAndFile(dir, fname string) string {
 		log.Fatalf("Unable to get %s: %v", path, err)
 	}
 	return fname
+}
+
+func CheckErr(err error, v ...interface{}) {
+	if err != nil {
+		v = append(v, err)
+		prnt.StderrLog.Fatalln(v...)
+	}
+}
+func CheckErrf(err error, format string, v ...interface{}) {
+	if err != nil {
+		v = append(v, err)
+		prnt.StderrLog.Fatalf(format+" %v\n", v...)
+	}
 }

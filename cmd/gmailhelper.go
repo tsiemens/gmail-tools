@@ -268,18 +268,10 @@ const (
 	LabelsAndPayload
 )
 
-func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
-	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
+func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message) (
+	[]*gm.Message, error) {
 
-	var format string
-	switch detailLevel {
-	case IdsOnly:
-		log.Fatalln("Invalid detailLevel: IdsOnly")
-	case LabelsOnly:
-		format = messageFormatMinimal
-	case LabelsAndPayload:
-		format = messageFormatMetadata
-	}
+	format := messageFormatMetadata
 
 	var detailedMsgs []*gm.Message
 
@@ -299,6 +291,26 @@ func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message,
 	prnt.HPrint(printLvl, "\n")
 
 	return detailedMsgs, nil
+}
+
+func (h *GmailHelper) LoadDetailedUncachedMessages(msgs []*gm.Message, cache *Cache) (
+	[]*gm.Message, error) {
+
+	newMsgs := make([]*gm.Message, 0, len(msgs))
+	cachedMsgs := make([]*gm.Message, 0, len(msgs))
+	for _, msg := range msgs {
+		if cMsg, ok := cache.Msgs[msg.Id]; ok {
+			cachedMsgs = append(cachedMsgs, cMsg)
+		} else {
+			newMsgs = append(newMsgs, msg)
+		}
+	}
+	var err error
+	newMsgs, err = h.LoadDetailedMessages(newMsgs)
+	if err != nil {
+		return nil, err
+	}
+	return append(cachedMsgs, newMsgs...), nil
 }
 
 func (h *GmailHelper) LoadMessage(id string) (*gm.Message, error) {
@@ -344,7 +356,7 @@ func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly boo
 
 	if detailLevel != IdsOnly {
 		var err error
-		msgs, err = h.LoadDetailedMessages(msgs, detailLevel)
+		msgs, err = h.LoadDetailedMessages(msgs)
 		if err != nil {
 			return nil, err
 		}

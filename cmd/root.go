@@ -16,6 +16,7 @@ var Verbose = false
 var Quiet = false
 var BatchMode = false
 var EmailToAssert string
+var ClearCache = false
 
 func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
 	if AssumeYes {
@@ -65,7 +66,7 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(onInit)
 
 	// Persistent flags, which are global to the app cli
 	RootCmd.PersistentFlags().BoolVar(
@@ -84,10 +85,14 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&EmailToAssert, "assert-email", "",
 		"check that the authorized account matches this email address, before taking"+
 			"any action")
+
+	RootCmd.PersistentFlags().BoolVar(&ClearCache, "clear-cache", false,
+		"Delete the cache files before running the command")
 }
 
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
+// onInit reads in config file and ENV variables if set, and performs global
+// or common actions before running command functions.
+func onInit() {
 	prnt.NoHumanOnly = BatchMode
 	prnt.DebugMode = util.DebugMode
 	if Quiet && Verbose {
@@ -97,6 +102,11 @@ func initConfig() {
 		prnt.LevelEnabled = prnt.VerboseLevel
 	} else if Quiet {
 		prnt.LevelEnabled = prnt.AlwaysLevel
+	}
+
+	if ClearCache {
+		cache := NewCache()
+		cache.Clear()
 	}
 
 	// if cfgFile != "" {

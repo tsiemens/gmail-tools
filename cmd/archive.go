@@ -31,15 +31,9 @@ func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
-	detailLevel := LabelsOnly
-	if Verbose {
-		detailLevel = LabelsAndPayload
-	}
 	msgs, err := a.helper.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
-		true, !archiveRead, detailLevel)
-	if err != nil {
-		prnt.StderrLog.Fatalf("%v\n", err)
-	}
+		true, !archiveRead, LabelsAndPayload)
+	util.CheckErr(err)
 
 	var msgsToArchive []*gm.Message
 	for _, msg := range msgs {

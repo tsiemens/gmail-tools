@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/prnt"
+	"github.com/tsiemens/gmail-tools/util"
 )
 
 var searchLabels []string
@@ -28,6 +29,9 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
 
+	cache := NewCache()
+	cache.LoadMsgs()
+
 	query := ""
 	for _, label := range searchLabels {
 		query += "label:(" + label + ") "
@@ -38,15 +42,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	if query == "" {
 		prnt.StderrLog.Println("No query provided")
-	}
-
-	// If the quiet label is set, then we will never need the payload during the
-	// command execution.
-	var detailLevel MessageDetailLevel
-	if Quiet {
-		detailLevel = LabelsOnly
-	} else {
-		detailLevel = LabelsAndPayload
 	}
 
 	conf := LoadConfig()
@@ -68,7 +63,8 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	if searchInteresting || searchUninteresting {
 		var filteredMsgs []*gm.Message
-		msgs, err = gHelper.LoadDetailedMessages(msgs, detailLevel)
+		msgs, err = gHelper.LoadDetailedUncachedMessages(msgs, cache)
+		util.CheckErr(err)
 		for _, msg := range msgs {
 			msgInterest := gHelper.MsgInterest(msg)
 			if (searchInteresting && msgInterest == Interesting) ||
@@ -76,6 +72,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 				filteredMsgs = append(filteredMsgs, msg)
 			}
 		}
+		cache.UpdateMsgs(msgs)
 		hasLoadedMsgDetails = true
 		msgs = filteredMsgs
 	}
@@ -93,12 +90,12 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 			}
 		} else {
 			if !hasLoadedMsgDetails {
-				msgs, err = gHelper.LoadDetailedMessages(msgs, LabelsAndPayload)
-				if err != nil {
-					prnt.StderrLog.Fatalf("%v\n", err)
-				}
+				msgs, err = gHelper.LoadDetailedUncachedMessages(msgs, cache)
+				util.CheckErr(err)
+				cache.UpdateMsgs(msgs)
 				hasLoadedMsgDetails = true
 			}
+
 			gHelper.PrintMessagesByCategory(msgs)
 		}
 	}
@@ -106,6 +103,8 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchTouch {
 		maybeTouchMessages(msgs, gHelper)
 	}
+
+	cache.WriteMsgs()
 }
 
 var searchCmd = &cobra.Command{
