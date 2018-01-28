@@ -33,7 +33,7 @@ func maybeTouchMessages(msgs []*gm.Message, helper *GmailHelper) {
 	if DryRun {
 		fmt.Println("Skipping touching message" + plural + " (--dry provided)")
 	} else {
-		if MaybeConfirmFromInput("Mark message"+plural+" touched?", false) {
+		if MaybeConfirmFromInput("Mark message"+plural+" touched?", true) {
 			err := helper.TouchMessages(msgs)
 			if err != nil {
 				log.Fatalf("Failed to touch message"+plural+": %s\n", err)
