@@ -14,6 +14,7 @@ var searchTouch = false
 var searchInteresting = false
 var searchUninteresting = false
 var searchPrintIdsOnly = false
+var searchPrintJson = false
 
 func touchMessages(msgs []*gm.Message, gHelper *GmailHelper, conf *Config) error {
 	touchLabelId := gHelper.LabelIdFromName(conf.ApplyLabelOnTouch)
@@ -96,7 +97,11 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 				hasLoadedMsgDetails = true
 			}
 
-			gHelper.PrintMessagesByCategory(msgs)
+			if searchPrintJson {
+				gHelper.PrintMessagesJson(msgs)
+			} else {
+				gHelper.PrintMessagesByCategory(msgs)
+			}
 		}
 	}
 
@@ -128,5 +133,7 @@ func init() {
 		"Filter results by uninteresting messages")
 	searchCmd.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
 		"Only prints out only messageId,threadId (does not prompt)")
+	searchCmd.Flags().BoolVar(&searchPrintJson, "json", false,
+		"Print message details formatted as json")
 	addDryFlag(searchCmd)
 }

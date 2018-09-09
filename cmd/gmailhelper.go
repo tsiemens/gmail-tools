@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -161,6 +162,59 @@ func (h *GmailHelper) messageLabelNames(m *gm.Message) []string {
 
 var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
 
+func GetFromEmail(fromHeaderVal string) string {
+	matches := fromFieldRegexp.FindStringSubmatch(fromHeaderVal)
+	if len(matches) > 0 {
+		return matches[1]
+	}
+	return fromHeaderVal
+}
+
+type MessageJson struct {
+	MessageId string   `json:"messageId"`
+	ThreadId  string   `json"threadId"`
+	Subject   string   `json:"subject"`
+	From      string   `json:"from"`
+	Labels    []string `json:"labels"`
+}
+
+func (h *GmailHelper) GetMessageJson(m *gm.Message) *MessageJson {
+	msgJson := &MessageJson{}
+
+	msgJson.MessageId = m.Id
+	msgJson.ThreadId = m.ThreadId
+
+	if m.Payload != nil && m.Payload.Headers != nil {
+		for _, hdr := range m.Payload.Headers {
+			if hdr.Name == "Subject" {
+				msgJson.Subject = hdr.Value
+			}
+			if hdr.Name == "From" {
+				msgJson.From = GetFromEmail(hdr.Value)
+			}
+		}
+	}
+
+	labelNames := h.messageLabelNames(m)
+	msgJson.Labels = append(msgJson.Labels, labelNames...)
+
+	return msgJson
+}
+
+func (h *GmailHelper) PrintMessagesJson(msgs []*gm.Message) {
+	var msgsJson []*MessageJson
+	for _, msg := range msgs {
+		msgsJson = append(msgsJson, h.GetMessageJson(msg))
+	}
+
+	bytes, err := json.MarshalIndent(msgsJson, "", "  ")
+	if err != nil {
+		fmt.Errorf("Failed to martial messages: %v", err)
+		return
+	}
+	fmt.Printf("%s", string(bytes))
+}
+
 func (h *GmailHelper) PrintMessage(m *gm.Message) {
 	var subject string
 	var from string
@@ -170,12 +224,7 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 				subject = hdr.Value
 			}
 			if hdr.Name == "From" {
-				matches := fromFieldRegexp.FindStringSubmatch(hdr.Value)
-				if len(matches) > 0 {
-					from = matches[1]
-				} else {
-					from = hdr.Value
-				}
+				from = GetFromEmail(hdr.Value)
 			}
 		}
 	}
