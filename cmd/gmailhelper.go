@@ -162,7 +162,7 @@ func (h *GmailHelper) messageLabelNames(m *gm.Message) []string {
 
 var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
 
-func GetFromEmail(fromHeaderVal string) string {
+func GetFromName(fromHeaderVal string) string {
 	matches := fromFieldRegexp.FindStringSubmatch(fromHeaderVal)
 	if len(matches) > 0 {
 		return matches[1]
@@ -172,7 +172,8 @@ func GetFromEmail(fromHeaderVal string) string {
 
 type MessageJson struct {
 	MessageId string   `json:"messageId"`
-	ThreadId  string   `json"threadId"`
+	ThreadId  string   `json:"threadId"`
+	Timestamp int64    `json:"timestamp"`
 	Subject   string   `json:"subject"`
 	From      string   `json:"from"`
 	Labels    []string `json:"labels"`
@@ -183,6 +184,7 @@ func (h *GmailHelper) GetMessageJson(m *gm.Message) *MessageJson {
 
 	msgJson.MessageId = m.Id
 	msgJson.ThreadId = m.ThreadId
+	msgJson.Timestamp = m.InternalDate
 
 	if m.Payload != nil && m.Payload.Headers != nil {
 		for _, hdr := range m.Payload.Headers {
@@ -190,7 +192,7 @@ func (h *GmailHelper) GetMessageJson(m *gm.Message) *MessageJson {
 				msgJson.Subject = hdr.Value
 			}
 			if hdr.Name == "From" {
-				msgJson.From = GetFromEmail(hdr.Value)
+				msgJson.From = hdr.Value
 			}
 		}
 	}
@@ -224,7 +226,7 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 				subject = hdr.Value
 			}
 			if hdr.Name == "From" {
-				from = GetFromEmail(hdr.Value)
+				from = GetFromName(hdr.Value)
 			}
 		}
 	}
