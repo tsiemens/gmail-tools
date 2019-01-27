@@ -24,22 +24,28 @@ func addAssumeYesFlag(command *cobra.Command) {
 		"Answer 'yes' for all prompts")
 }
 
-func maybeTouchMessages(msgs []*gm.Message, helper *GmailHelper) {
-	plural := ""
-	if len(msgs) > 1 {
-		plural = "s"
-	}
+func maybeApplyLabels(
+	msgs []*gm.Message, gHelper *GmailHelper, labelNames []string) {
 
 	if DryRun {
-		fmt.Println("Skipping touching message" + plural + " (--dry provided)")
+		fmt.Printf("Skipping applying label(s) %v (--dry provided)\n",
+			labelNames)
 	} else {
-		if MaybeConfirmFromInput("Mark message"+plural+" touched?", true) {
-			err := helper.TouchMessages(msgs)
+		if MaybeConfirmFromInput(fmt.Sprintf("Apply label(s) %v?", labelNames), true) {
+			err := gHelper.ApplyLabels(msgs, labelNames)
 			if err != nil {
-				log.Fatalf("Failed to touch message"+plural+": %s\n", err)
+				log.Fatalf("Failed to apply label(s): %s\n", err)
 			} else {
-				prnt.HPrintln(prnt.Quietable, "Message"+plural+" marked touched")
+				prnt.HPrintln(prnt.Quietable, "Label(s) applied")
 			}
 		}
 	}
+}
+
+func maybeTouchMessages(msgs []*gm.Message, helper *GmailHelper) {
+	maybeApplyLabels(msgs, helper, []string{helper.conf.ApplyLabelOnTouch})
+}
+
+func maybeTrashMessages(msgs []*gm.Message, helper *GmailHelper) {
+	maybeApplyLabels(msgs, helper, []string{"TRASH"})
 }

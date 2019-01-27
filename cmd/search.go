@@ -10,20 +10,13 @@ import (
 )
 
 var searchLabels []string
+var searchLabelsToAdd []string
 var searchTouch = false
+var searchTrash = false
 var searchInteresting = false
 var searchUninteresting = false
 var searchPrintIdsOnly = false
 var searchPrintJson = false
-
-func touchMessages(msgs []*gm.Message, gHelper *GmailHelper, conf *Config) error {
-	touchLabelId := gHelper.LabelIdFromName(conf.ApplyLabelOnTouch)
-
-	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds: []string{touchLabelId},
-	}
-	return gHelper.BatchModifyMessages(msgs, &modReq)
-}
 
 func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchInteresting && searchUninteresting {
@@ -105,8 +98,14 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	if len(searchLabelsToAdd) > 0 {
+		maybeApplyLabels(msgs, gHelper, searchLabelsToAdd)
+	}
 	if searchTouch {
 		maybeTouchMessages(msgs, gHelper)
+	}
+	if searchTrash {
+		maybeTrashMessages(msgs, gHelper)
 	}
 
 	cache.WriteMsgs()
@@ -125,8 +124,12 @@ func init() {
 
 	searchCmd.Flags().StringArrayVarP(&searchLabels, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")
+	searchCmd.Flags().StringArrayVar(&searchLabelsToAdd, "add-label", []string{},
+		"Apply a label to matches (may be provided multiple times)")
 	searchCmd.Flags().BoolVarP(&searchTouch, "touch", "t", false,
 		"Apply 'touched' label from ~/.gmailcli/config.yaml")
+	searchCmd.Flags().BoolVar(&searchTrash, "trash", false,
+		"Send messages to the trash")
 	searchCmd.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,
 		"Filter results by interesting messages")
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,

@@ -426,25 +426,61 @@ func (h *GmailHelper) LabelIdFromName(label string) string {
 	return ""
 }
 
+const (
+	MaxBatchModifySize = 500
+)
+
 func (h *GmailHelper) BatchModifyMessages(msgs []*gm.Message,
 	modReq *gm.BatchModifyMessagesRequest) error {
 
-	var msgIds []string
-	for _, msg := range msgs {
-		msgIds = append(msgIds, msg.Id)
+	var err error
+	nMsgs := len(msgs)
+	msgsLeft := nMsgs
+
+	nBatches := nMsgs / MaxBatchModifySize
+	if nMsgs%MaxBatchModifySize != 0 {
+		nBatches++
 	}
 
-	modReq.Ids = msgIds
-	return h.srv.Users.Messages.BatchModify(h.User, modReq).Do()
+	prnt.HPrintf(prnt.Quietable, "Applying changes to ")
+	msgIdx := 0
+	for batch := 0; batch < nBatches; batch++ {
+		batchSize := util.IntMin(msgsLeft, MaxBatchModifySize)
+		prnt.HPrintf(prnt.Quietable, "%d... ", msgIdx+batchSize)
+
+		msgIds := make([]string, 0, batchSize)
+		for i := 0; i < batchSize; i++ {
+			msgIds = append(msgIds, msgs[msgIdx].Id)
+			msgIdx++
+		}
+
+		modReq.Ids = msgIds
+		err = h.srv.Users.Messages.BatchModify(h.User, modReq).Do()
+		if err != nil {
+			return err
+		}
+
+		msgsLeft -= batchSize
+	}
+	prnt.HPrintf(prnt.Quietable, "Done\n")
+
+	return nil
+}
+
+func (h *GmailHelper) ApplyLabels(msgs []*gm.Message, labelNames []string) error {
+	labelIds := make([]string, 0, len(labelNames))
+	for _, labelName := range labelNames {
+		labelIds = append(labelIds, h.LabelIdFromName(labelName))
+	}
+
+	modReq := gm.BatchModifyMessagesRequest{
+		AddLabelIds: labelIds,
+	}
+	return h.BatchModifyMessages(msgs, &modReq)
 }
 
 func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
-	touchLabelId := h.LabelIdFromName(h.conf.ApplyLabelOnTouch)
-
-	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds: []string{touchLabelId},
-	}
-	return h.BatchModifyMessages(msgs, &modReq)
+	return h.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
 }
 
 type InterestLevel int
