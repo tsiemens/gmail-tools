@@ -13,6 +13,8 @@ import (
 
 const (
 	msgCacheFileName = "msgcache.dat"
+
+	maxCacheEntries = 1000
 )
 
 type Cache struct {
@@ -75,9 +77,27 @@ func (c *Cache) WriteMsgs() {
 }
 
 func (c *Cache) UpdateMsgs(msgs []*gm.Message) {
+	oldMsgIds := make(map[string]bool, len(c.Msgs))
+
+	i := 0
 	for _, msg := range msgs {
+		if i >= maxCacheEntries {
+			break
+		}
 		c.Msgs[msg.Id] = msg
+		delete(oldMsgIds, msg.Id)
+		i++
 	}
+
+	if len(c.Msgs) > maxCacheEntries {
+		for id, _ := range oldMsgIds {
+			delete(c.Msgs, id)
+			if len(c.Msgs) <= maxCacheEntries {
+				break
+			}
+		}
+	}
+
 	c.msgsDirty = true
 }
 
