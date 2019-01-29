@@ -17,6 +17,7 @@ var searchInteresting = false
 var searchUninteresting = false
 var searchPrintIdsOnly = false
 var searchPrintJson = false
+var searchMaxMsgs int64
 
 func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchInteresting && searchUninteresting {
@@ -47,7 +48,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
-	msgs, err := gHelper.QueryMessages(query, false, false, IdsOnly)
+	msgs, err := gHelper.QueryMessages(query, false, false, searchMaxMsgs, IdsOnly)
 	if err != nil {
 		prnt.StderrLog.Fatalf("%v\n", err)
 	}
@@ -138,5 +139,7 @@ func init() {
 		"Only prints out only messageId,threadId (does not prompt)")
 	searchCmd.Flags().BoolVar(&searchPrintJson, "json", false,
 		"Print message details formatted as json")
+	searchCmd.Flags().Int64VarP(&searchMaxMsgs, "max", "m", -1,
+		"Set a max on how many results are queried.")
 	addDryFlag(searchCmd)
 }

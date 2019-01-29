@@ -368,7 +368,11 @@ func (h *GmailHelper) LoadMessage(id string) (*gm.Message, error) {
 	return h.srv.Users.Messages.Get(h.User, id).Do()
 }
 
-func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly bool,
+/* Query the server for messages.
+ * maxMsgs: a value greater than 0 to apply a max
+ */
+func (h *GmailHelper) QueryMessages(
+	query string, inboxOnly bool, unreadOnly bool, maxMsgs int64,
 	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
 
 	fullQuery := ""
@@ -393,6 +397,9 @@ func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly boo
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
 		}
+		if maxMsgs > 0 {
+			call = call.MaxResults(maxMsgs)
+		}
 		r, err := call.Do()
 		if err != nil {
 			return nil, fmt.Errorf("Unable to get messages: %v", err)
@@ -402,6 +409,11 @@ func (h *GmailHelper) QueryMessages(query string, inboxOnly bool, unreadOnly boo
 
 		for _, m := range r.Messages {
 			msgs = append(msgs, m)
+			if maxMsgs > 0 && int64(len(msgs)) == maxMsgs {
+				// Signal no more pages that we want to read.
+				pageToken = ""
+				break
+			}
 		}
 	}
 
