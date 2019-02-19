@@ -42,7 +42,7 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
-	msg, err := gHelper.LoadMessage(msgId)
+	msg, err := gHelper.Msgs.LoadMessage(msgId)
 	if err != nil {
 		prnt.StderrLog.Fatalf("%v\n", err)
 	}

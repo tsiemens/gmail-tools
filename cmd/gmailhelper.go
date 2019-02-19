@@ -14,6 +14,7 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 	"gopkg.in/yaml.v2"
 
+	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -22,17 +23,6 @@ const (
 	ConfigYamlFileName = "config.yaml"
 
 	caseIgnore = "(?i)"
-)
-
-// Format values
-const (
-	// Default
-	messageFormatFull = "full"
-	// Labels only
-	messageFormatMinimal = "minimal"
-	// Labels and payload data
-	messageFormatMetadata = "metadata"
-	messageFormatRaw      = "raw"
 )
 
 type Config struct {
@@ -87,16 +77,21 @@ func LoadConfig() *Config {
 }
 
 type GmailHelper struct {
-	User string
+	User    string
+	Account *api.AccountHelper
+	Msgs    *api.MsgHelper
 
-	srv    *gm.Service
-	labels map[string]string // Label ID to label name
-	conf   *Config
+	srv  *gm.Service
+	conf *Config
 }
 
 func NewGmailHelper(srv *gm.Service, user string, conf *Config) *GmailHelper {
-	helper := &GmailHelper{User: user, srv: srv, conf: conf}
-	emailAddr, err := helper.GetEmailAddress()
+	accountHelper := api.NewAccountHelper(user, srv)
+	msgHelper := api.NewMsgHelper(user, srv)
+	helper := &GmailHelper{
+		User: user, Account: accountHelper, Msgs: msgHelper,
+		srv: srv, conf: conf}
+	emailAddr, err := helper.Account.GetEmailAddress()
 	if err != nil {
 		prnt.StderrLog.Fatalln("Failed to get account email", err)
 	}
@@ -109,66 +104,7 @@ func NewGmailHelper(srv *gm.Service, user string, conf *Config) *GmailHelper {
 	return helper
 }
 
-func (h *GmailHelper) GetEmailAddress() (string, error) {
-	r, err := h.srv.Users.GetProfile(h.User).Do()
-	if err != nil {
-		return "", err
-	}
-	return r.EmailAddress, nil
-}
-
 // ---------- Message methods ----------------
-
-func (h *GmailHelper) loadLabels() error {
-	util.Debugln("Loading labels")
-	r, err := h.srv.Users.Labels.List(h.User).Do()
-	if err != nil {
-		return err
-	}
-	labelMap := make(map[string]string)
-	for _, l := range r.Labels {
-		labelMap[l.Id] = l.Name
-	}
-	h.labels = labelMap
-	return nil
-}
-
-func (h *GmailHelper) requireLabels() {
-	if h.labels == nil {
-		err := h.loadLabels()
-		if err != nil {
-			log.Fatalf("Failed to load labels: %v\n", err)
-		}
-	}
-}
-
-func (h *GmailHelper) LabelName(lblId string) string {
-	h.requireLabels()
-	return h.labels[lblId]
-}
-
-func (h *GmailHelper) labelNames(ids []string) []string {
-	h.requireLabels()
-	var lNames []string
-	for _, lId := range ids {
-		lNames = append(lNames, h.labels[lId])
-	}
-	return lNames
-}
-
-func (h *GmailHelper) messageLabelNames(m *gm.Message) []string {
-	return h.labelNames(m.LabelIds)
-}
-
-var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
-
-func GetFromName(fromHeaderVal string) string {
-	matches := fromFieldRegexp.FindStringSubmatch(fromHeaderVal)
-	if len(matches) > 0 {
-		return matches[1]
-	}
-	return fromHeaderVal
-}
 
 type MessageJson struct {
 	MessageId string   `json:"messageId"`
@@ -197,7 +133,7 @@ func (h *GmailHelper) GetMessageJson(m *gm.Message) *MessageJson {
 		}
 	}
 
-	labelNames := h.messageLabelNames(m)
+	labelNames := h.Msgs.MessageLabelNames(m)
 	msgJson.Labels = append(msgJson.Labels, labelNames...)
 
 	return msgJson
@@ -226,7 +162,7 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 				subject = hdr.Value
 			}
 			if hdr.Name == "From" {
-				from = GetFromName(hdr.Value)
+				from = api.GetFromName(hdr.Value)
 			}
 		}
 	}
@@ -237,7 +173,7 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 		from = "<unknown sender>"
 	}
 
-	labelNames := h.messageLabelNames(m)
+	labelNames := h.Msgs.MessageLabelNames(m)
 	// Filter out some labels here
 	var labelsToShow []string
 	for _, l := range labelNames {
@@ -311,188 +247,8 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 
 }
 
-type MessageDetailLevel int
-
-const (
-	IdsOnly MessageDetailLevel = iota
-	LabelsOnly
-	LabelsAndPayload
-)
-
-func (h *GmailHelper) LoadDetailedMessages(msgs []*gm.Message) (
-	[]*gm.Message, error) {
-
-	format := messageFormatMetadata
-
-	var detailedMsgs []*gm.Message
-
-	printLvl := prnt.Always
-	prnt.HPrint(printLvl, "Loading message details ")
-	for i, msg := range msgs {
-		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))
-		prnt.HPrint(printLvl, progressStr)
-
-		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).Format(format).Do()
-		if err != nil {
-			return nil, fmt.Errorf("Failed to get message: %v", err)
-		}
-		detailedMsgs = append(detailedMsgs, dMsg)
-		prnt.HPrint(printLvl, strings.Repeat("\x08", len(progressStr)))
-	}
-	prnt.HPrint(printLvl, "\n")
-
-	return detailedMsgs, nil
-}
-
-func (h *GmailHelper) LoadDetailedUncachedMessages(msgs []*gm.Message, cache *Cache) (
-	[]*gm.Message, error) {
-
-	newMsgs := make([]*gm.Message, 0, len(msgs))
-	cachedMsgs := make([]*gm.Message, 0, len(msgs))
-	for _, msg := range msgs {
-		if cMsg, ok := cache.Msgs[msg.Id]; ok {
-			cachedMsgs = append(cachedMsgs, cMsg)
-		} else {
-			newMsgs = append(newMsgs, msg)
-		}
-	}
-	var err error
-	newMsgs, err = h.LoadDetailedMessages(newMsgs)
-	if err != nil {
-		return nil, err
-	}
-	return append(cachedMsgs, newMsgs...), nil
-}
-
-func (h *GmailHelper) LoadMessage(id string) (*gm.Message, error) {
-	return h.srv.Users.Messages.Get(h.User, id).Do()
-}
-
-/* Query the server for messages.
- * maxMsgs: a value greater than 0 to apply a max
- */
-func (h *GmailHelper) QueryMessages(
-	query string, inboxOnly bool, unreadOnly bool, maxMsgs int64,
-	detailLevel MessageDetailLevel) ([]*gm.Message, error) {
-
-	fullQuery := ""
-	if inboxOnly {
-		fullQuery += "in:inbox "
-	}
-	if unreadOnly {
-		fullQuery += "label:unread "
-	}
-
-	fullQuery += query
-
-	pageToken := ""
-	queriedPageCnt := 0
-	var msgs []*gm.Message
-
-	for queriedPageCnt == 0 || pageToken != "" {
-		queriedPageCnt++
-		util.Debugf("Querying messages: '%s', page: %d\n", fullQuery, queriedPageCnt)
-
-		call := h.srv.Users.Messages.List(h.User).Q(fullQuery)
-		if pageToken != "" {
-			call = call.PageToken(pageToken)
-		}
-		if maxMsgs > 0 {
-			call = call.MaxResults(maxMsgs)
-		}
-		r, err := call.Do()
-		if err != nil {
-			return nil, fmt.Errorf("Unable to get messages: %v", err)
-		}
-
-		pageToken = r.NextPageToken
-
-		for _, m := range r.Messages {
-			msgs = append(msgs, m)
-			if maxMsgs > 0 && int64(len(msgs)) == maxMsgs {
-				// Signal no more pages that we want to read.
-				pageToken = ""
-				break
-			}
-		}
-	}
-
-	if detailLevel != IdsOnly {
-		var err error
-		msgs, err = h.LoadDetailedMessages(msgs)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return msgs, nil
-}
-
-func (h *GmailHelper) LabelIdFromName(label string) string {
-	h.requireLabels()
-	for lId, lName := range h.labels {
-		if label == lName {
-			return lId
-		}
-	}
-	log.Fatalf("No label named %s found\n", label)
-	return ""
-}
-
-const (
-	MaxBatchModifySize = 500
-)
-
-func (h *GmailHelper) BatchModifyMessages(msgs []*gm.Message,
-	modReq *gm.BatchModifyMessagesRequest) error {
-
-	var err error
-	nMsgs := len(msgs)
-	msgsLeft := nMsgs
-
-	nBatches := nMsgs / MaxBatchModifySize
-	if nMsgs%MaxBatchModifySize != 0 {
-		nBatches++
-	}
-
-	prnt.HPrintf(prnt.Quietable, "Applying changes to ")
-	msgIdx := 0
-	for batch := 0; batch < nBatches; batch++ {
-		batchSize := util.IntMin(msgsLeft, MaxBatchModifySize)
-		prnt.HPrintf(prnt.Quietable, "%d... ", msgIdx+batchSize)
-
-		msgIds := make([]string, 0, batchSize)
-		for i := 0; i < batchSize; i++ {
-			msgIds = append(msgIds, msgs[msgIdx].Id)
-			msgIdx++
-		}
-
-		modReq.Ids = msgIds
-		err = h.srv.Users.Messages.BatchModify(h.User, modReq).Do()
-		if err != nil {
-			return err
-		}
-
-		msgsLeft -= batchSize
-	}
-	prnt.HPrintf(prnt.Quietable, "Done\n")
-
-	return nil
-}
-
-func (h *GmailHelper) ApplyLabels(msgs []*gm.Message, labelNames []string) error {
-	labelIds := make([]string, 0, len(labelNames))
-	for _, labelName := range labelNames {
-		labelIds = append(labelIds, h.LabelIdFromName(labelName))
-	}
-
-	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds: labelIds,
-	}
-	return h.BatchModifyMessages(msgs, &modReq)
-}
-
 func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
-	return h.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
+	return h.Msgs.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
 }
 
 type InterestLevel int
@@ -508,7 +264,7 @@ func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
 	var matchedInter = false
 
 	for _, lId := range m.LabelIds {
-		lName := h.LabelName(lId)
+		lName := h.Msgs.LabelName(lId)
 		labelIsUninteresting := false
 		for _, labRe := range h.conf.uninterLabelRegexps {
 			idxSlice := labRe.FindStringIndex(lName)
@@ -676,11 +432,11 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	actionsMap := map[string]string{}
 	if len(filter.Action.AddLabelIds) > 0 {
 		actionsMap["AddLabelIds"] =
-			strings.Join(h.labelNames(filter.Action.AddLabelIds), ", ")
+			strings.Join(h.Msgs.LabelNames(filter.Action.AddLabelIds), ", ")
 	}
 	if len(filter.Action.RemoveLabelIds) > 0 {
 		actionsMap["RemoveLabelIds"] =
-			strings.Join(h.labelNames(filter.Action.RemoveLabelIds), ", ")
+			strings.Join(h.Msgs.LabelNames(filter.Action.RemoveLabelIds), ", ")
 	}
 	if filter.Action.Forward != "" {
 		actionsMap["Forward"] = filter.Action.Forward

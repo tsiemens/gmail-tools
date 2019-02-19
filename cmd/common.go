@@ -32,7 +32,7 @@ func maybeApplyLabels(
 			labelNames)
 	} else {
 		if MaybeConfirmFromInput(fmt.Sprintf("Apply label(s) %v?", labelNames), true) {
-			err := gHelper.ApplyLabels(msgs, labelNames)
+			err := gHelper.Msgs.ApplyLabels(msgs, labelNames)
 			if err != nil {
 				log.Fatalf("Failed to apply label(s): %s\n", err)
 			} else {

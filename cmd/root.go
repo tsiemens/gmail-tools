@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	// "github.com/spf13/viper"
 
+	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -105,7 +106,7 @@ func onInit() {
 	}
 
 	if ClearCache {
-		cache := NewCache()
+		cache := api.NewCache()
 		cache.Clear()
 	}
 

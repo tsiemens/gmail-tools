@@ -24,7 +24,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
 
-	cache := NewCache()
+	cache := api.NewCache()
 	cache.LoadMsgs()
 
 	query := ""
@@ -48,7 +48,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
-	msgs, err := gHelper.QueryMessages(query, false, false, searchMaxMsgs, IdsOnly)
+	msgs, err := gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, api.IdsOnly)
 	if err != nil {
 		prnt.StderrLog.Fatalf("%v\n", err)
 	}
@@ -58,7 +58,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	if searchInteresting || searchUninteresting {
 		var filteredMsgs []*gm.Message
-		msgs, err = gHelper.LoadDetailedUncachedMessages(msgs, cache)
+		msgs, err = gHelper.Msgs.LoadDetailedUncachedMessages(msgs, cache)
 		util.CheckErr(err)
 		for _, msg := range msgs {
 			msgInterest := gHelper.MsgInterest(msg)
@@ -85,7 +85,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 			}
 		} else {
 			if !hasLoadedMsgDetails {
-				msgs, err = gHelper.LoadDetailedUncachedMessages(msgs, cache)
+				msgs, err = gHelper.Msgs.LoadDetailedUncachedMessages(msgs, cache)
 				util.CheckErr(err)
 				cache.UpdateMsgs(msgs)
 				hasLoadedMsgDetails = true

@@ -32,8 +32,8 @@ func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
 	var maxMsgs int64 = -1
-	msgs, err := a.helper.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
-		true, !archiveRead, maxMsgs, LabelsAndPayload)
+	msgs, err := a.helper.Msgs.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
+		true, !archiveRead, maxMsgs, api.LabelsAndPayload)
 	util.CheckErr(err)
 
 	var msgsToArchive []*gm.Message
@@ -50,7 +50,7 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 
 	var extraLabelId string
 	if a.conf.ApplyLabelToUninteresting != "" {
-		extraLabelId = a.helper.LabelIdFromName(a.conf.ApplyLabelToUninteresting)
+		extraLabelId = a.helper.Msgs.LabelIdFromName(a.conf.ApplyLabelToUninteresting)
 		addLabels = append(addLabels, extraLabelId)
 	}
 
@@ -59,7 +59,7 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 		RemoveLabelIds: []string{inboxLabelId},
 	}
 
-	return a.helper.BatchModifyMessages(msgs, &modReq)
+	return a.helper.Msgs.BatchModifyMessages(msgs, &modReq)
 }
 
 func runArchiveCmd(cmd *cobra.Command, args []string) {
