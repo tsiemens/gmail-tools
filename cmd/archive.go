@@ -62,8 +62,20 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 	return a.helper.Msgs.BatchModifyMessages(msgs, &modReq)
 }
 
+type SimpleFunc func()
+
+func pluginTest() {
+	plugins := plugin.LoadPlugins()
+
+	for _, plg := range plugins {
+		plg.Test()
+	}
+}
+
 func runArchiveCmd(cmd *cobra.Command, args []string) {
-	conf := LoadConfig()
+	pluginTest()
+	return
+	conf := foobar.LoadConfig()
 
 	srv := api.NewGmailClient(api.ModifyScope)
 

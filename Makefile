@@ -2,6 +2,7 @@ export GOPATH=$(shell echo $$(readlink -f $$(pwd)/../../../..))
 
 build:
 	mkdir -p bld
+	go build -buildmode=plugin -o bld/pluginscore.so ./pluginscore
 	go build -o bld/gmailcli main.go
 
 getdeps:

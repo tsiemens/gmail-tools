@@ -80,14 +80,23 @@ func ConfirmFromInputLong(msg string) bool {
 	}
 }
 
-func HomeDirAndFile(dir, fname string) (string, error) {
+// Create and return the name of a directory at $HOME/<dir>
+func HomeBasedDir(dir string) (string, error) {
 	usr, err := user.Current()
 	if err != nil {
 		return "", err
 	}
 	dirPath := filepath.Join(usr.HomeDir, dir)
 	os.MkdirAll(dirPath, 0700)
-	return filepath.Join(dirPath, url.QueryEscape(fname)), err
+	return dirPath, nil
+}
+
+func HomeDirAndFile(dir, fname string) (string, error) {
+	dirPath, err := HomeBasedDir(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dirPath, url.QueryEscape(fname)), nil
 }
 
 func RequiredHomeDirAndFile(dir, fname string) string {
@@ -97,6 +106,15 @@ func RequiredHomeDirAndFile(dir, fname string) string {
 		log.Fatalf("Unable to get %s: %v", path, err)
 	}
 	return fname
+}
+
+func RequiredHomeBasedDir(dir string) string {
+	dirName, err := HomeBasedDir(dir)
+	if err != nil {
+		path := filepath.Join(dir, dirName)
+		log.Fatalf("Unable to get %s/: %v", path, err)
+	}
+	return dirName
 }
 
 func CheckErr(err error, v ...interface{}) {
