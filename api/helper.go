@@ -11,16 +11,22 @@ import (
 	"github.com/tsiemens/gmail-tools/util"
 )
 
+type MessageFormat string
+
 // Format values
 const (
 	// Default
-	messageFormatFull = "full"
+	MessageFormatFull MessageFormat = "full"
 	// Labels only
-	messageFormatMinimal = "minimal"
+	MessageFormatMinimal MessageFormat = "minimal"
 	// Labels and payload data
-	messageFormatMetadata = "metadata"
-	messageFormatRaw      = "raw"
+	MessageFormatMetadata MessageFormat = "metadata"
+	MessageFormatRaw      MessageFormat = "raw"
 )
+
+func (f MessageFormat) ToString() string {
+	return string(f)
+}
 
 type AccountHelper struct {
 	User string
@@ -45,10 +51,20 @@ type MsgHelper struct {
 
 	srv    *gm.Service
 	labels map[string]string // Label ID to label name
+
+	cache *Cache
 }
 
 func NewMsgHelper(user string, srv *gm.Service) *MsgHelper {
 	return &MsgHelper{User: user, srv: srv}
+}
+
+func (h *MsgHelper) getLoadedCache() *Cache {
+	if h.cache == nil {
+		h.cache = NewCache()
+		h.cache.LoadMsgs()
+	}
+	return h.cache
 }
 
 // ---------- Message methods ----------------
@@ -94,10 +110,8 @@ func (h *MsgHelper) MessageLabelNames(m *gm.Message) []string {
 	return h.LabelNames(m.LabelIds)
 }
 
-func (h *MsgHelper) LoadDetailedMessages(msgs []*gm.Message) (
+func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 	[]*gm.Message, error) {
-
-	format := messageFormatMetadata
 
 	var detailedMsgs []*gm.Message
 
@@ -107,7 +121,8 @@ func (h *MsgHelper) LoadDetailedMessages(msgs []*gm.Message) (
 		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))
 		prnt.HPrint(printLvl, progressStr)
 
-		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).Format(format).Do()
+		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).
+			Format(format.ToString()).Do()
 		if err != nil {
 			return nil, fmt.Errorf("Failed to get message: %v", err)
 		}
@@ -119,8 +134,10 @@ func (h *MsgHelper) LoadDetailedMessages(msgs []*gm.Message) (
 	return detailedMsgs, nil
 }
 
-func (h *MsgHelper) LoadDetailedUncachedMessages(msgs []*gm.Message, cache *Cache) (
+func (h *MsgHelper) LoadMessages(msgs []*gm.Message, format MessageFormat) (
 	[]*gm.Message, error) {
+
+	cache := h.getLoadedCache()
 
 	newMsgs := make([]*gm.Message, 0, len(msgs))
 	cachedMsgs := make([]*gm.Message, 0, len(msgs))
@@ -132,10 +149,12 @@ func (h *MsgHelper) LoadDetailedUncachedMessages(msgs []*gm.Message, cache *Cach
 		}
 	}
 	var err error
-	newMsgs, err = h.LoadDetailedMessages(newMsgs)
+	newMsgs, err = h.fetchMessages(newMsgs, MessageFormatMetadata)
 	if err != nil {
 		return nil, err
 	}
+	cache.UpdateMsgs(newMsgs)
+	cache.WriteMsgs()
 	return append(cachedMsgs, newMsgs...), nil
 }
 
@@ -202,7 +221,7 @@ func (h *MsgHelper) QueryMessages(
 
 	if detailLevel != IdsOnly {
 		var err error
-		msgs, err = h.LoadDetailedMessages(msgs)
+		msgs, err = h.fetchMessages(msgs, MessageFormatMetadata)
 		if err != nil {
 			return nil, err
 		}

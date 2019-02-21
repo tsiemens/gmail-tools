@@ -7,7 +7,6 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/tsiemens/gmail-tools/api"
-	"github.com/tsiemens/gmail-tools/plugin"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )

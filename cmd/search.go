@@ -24,9 +24,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
 
-	cache := api.NewCache()
-	cache.LoadMsgs()
-
 	query := ""
 	for _, label := range searchLabels {
 		query += "label:(" + label + ") "
@@ -58,7 +55,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	if searchInteresting || searchUninteresting {
 		var filteredMsgs []*gm.Message
-		msgs, err = gHelper.Msgs.LoadDetailedUncachedMessages(msgs, cache)
+		msgs, err = gHelper.Msgs.LoadMessages(msgs, api.MessageFormatMetadata)
 		util.CheckErr(err)
 		for _, msg := range msgs {
 			msgInterest := gHelper.MsgInterest(msg)
@@ -67,7 +64,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 				filteredMsgs = append(filteredMsgs, msg)
 			}
 		}
-		cache.UpdateMsgs(msgs)
 		hasLoadedMsgDetails = true
 		msgs = filteredMsgs
 	}
@@ -85,9 +81,8 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 			}
 		} else {
 			if !hasLoadedMsgDetails {
-				msgs, err = gHelper.Msgs.LoadDetailedUncachedMessages(msgs, cache)
+				msgs, err = gHelper.Msgs.LoadMessages(msgs, api.MessageFormatMetadata)
 				util.CheckErr(err)
-				cache.UpdateMsgs(msgs)
 				hasLoadedMsgDetails = true
 			}
 
@@ -108,8 +103,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchTrash {
 		maybeTrashMessages(msgs, gHelper)
 	}
-
-	cache.WriteMsgs()
 }
 
 var searchCmd = &cobra.Command{
