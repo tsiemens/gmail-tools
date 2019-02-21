@@ -7,6 +7,7 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/plugin"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -62,20 +63,8 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 	return a.helper.Msgs.BatchModifyMessages(msgs, &modReq)
 }
 
-type SimpleFunc func()
-
-func pluginTest() {
-	plugins := plugin.LoadPlugins()
-
-	for _, plg := range plugins {
-		plg.Test()
-	}
-}
-
 func runArchiveCmd(cmd *cobra.Command, args []string) {
-	pluginTest()
-	return
-	conf := foobar.LoadConfig()
+	conf := LoadConfig()
 
 	srv := api.NewGmailClient(api.ModifyScope)
 

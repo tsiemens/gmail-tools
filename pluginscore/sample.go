@@ -1,16 +1,20 @@
 package main
 
-import "fmt"
-import "github.com/tsiemens/gmail-tools/plugin"
+import (
+	gm "google.golang.org/api/gmail/v1"
 
-func doTest() {
-	fmt.Println("plugin sample test")
+	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/plugin"
+)
+
+func matchesCategory(string, *gm.Message, *api.MsgHelper) bool {
+	return false
 }
 
 func builder() *plugin.Plugin {
 	return &plugin.Plugin{
-		Name: "Sample",
-		Test: doTest,
+		Name:            "Sample",
+		MatchesCategory: matchesCategory,
 	}
 }
 

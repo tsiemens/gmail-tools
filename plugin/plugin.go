@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	pluginlib "plugin"
 
-	// gm "google.golang.org/api/gmail/v1"
+	gm "google.golang.org/api/gmail/v1"
 
-	// "github.com/tsiemens/gmail-tools/cmd" // TODO don't import cmd
+	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -16,10 +16,16 @@ const (
 	pluginDir = "plugins"
 )
 
+// Common categories
+const (
+	CategoryInteresting   = "interesting"
+	CategoryUninteresting = "uninteresting"
+)
+
 type Plugin struct {
 	Name string
-	Test func()
-	// IsUninteresting func(*gm.Message, *cmd.GmailHelper) bool
+
+	MatchesCategory func(string, *gm.Message, *api.MsgHelper) bool
 }
 
 type PluginBuilder func() *Plugin
