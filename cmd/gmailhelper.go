@@ -3,8 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
@@ -12,69 +10,13 @@ import (
 	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
-	"gopkg.in/yaml.v2"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
+	"github.com/tsiemens/gmail-tools/plugin"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
-
-const (
-	ConfigYamlFileName = "config.yaml"
-
-	caseIgnore = "(?i)"
-)
-
-type Config struct {
-	InterestingMessageQuery    string            `yaml:"InterestingMessageQuery"`
-	UninterestingLabelPatterns []string          `yaml:"UninterestingLabelPatterns"`
-	InterestingLabelPatterns   []string          `yaml:"InterestingLabelPatterns"`
-	ApplyLabelToUninteresting  string            `yaml:"ApplyLabelToUninteresting"`
-	ApplyLabelOnTouch          string            `yaml:"ApplyLabelOnTouch"`
-	LabelColors                map[string]string `yaml:"LabelColors"`
-
-	uninterLabelRegexps []*regexp.Regexp
-	interLabelRegexps   []*regexp.Regexp
-	configFile          string
-}
-
-func LoadConfig() *Config {
-	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
-
-	confData, err := ioutil.ReadFile(confFname)
-	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
-	}
-
-	conf := &Config{}
-	conf.configFile = confFname
-	err = yaml.Unmarshal(confData, conf)
-	if err != nil {
-		log.Fatalf("Could not unmarshal: %v", err)
-	}
-	util.Debugf("config: %+v\n", conf)
-
-	for _, pat := range conf.UninterestingLabelPatterns {
-		re, err := regexp.Compile(caseIgnore + pat)
-		if err != nil {
-			break
-		}
-		conf.uninterLabelRegexps = append(conf.uninterLabelRegexps, re)
-	}
-	if err == nil {
-		for _, pat := range conf.InterestingLabelPatterns {
-			re, err := regexp.Compile(caseIgnore + pat)
-			if err != nil {
-				break
-			}
-			conf.interLabelRegexps = append(conf.interLabelRegexps, re)
-		}
-	}
-	if err != nil {
-		log.Fatalf("Failed to load config: \"%s\"", err)
-	}
-	return conf
-}
 
 type GmailHelper struct {
 	User    string
@@ -82,10 +24,12 @@ type GmailHelper struct {
 	Msgs    *api.MsgHelper
 
 	srv  *gm.Service
-	conf *Config
+	conf *config.Config
+
+	plugins []*plugin.Plugin
 }
 
-func NewGmailHelper(srv *gm.Service, user string, conf *Config) *GmailHelper {
+func NewGmailHelper(srv *gm.Service, user string, conf *config.Config) *GmailHelper {
 
 	accountHelper := api.NewAccountHelper(user, srv)
 	msgHelper := api.NewMsgHelper(user, srv)
@@ -252,6 +196,19 @@ func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
 	return h.Msgs.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
 }
 
+func (h *GmailHelper) MsgMatchesCategory(cat string, m *gm.Message) bool {
+	if h.plugins == nil {
+		h.plugins = plugin.LoadPlugins()
+	}
+
+	for _, plug := range h.plugins {
+		if plug.MatchesCategory(cat, m, h.Msgs) {
+			return true
+		}
+	}
+	return false
+}
+
 type InterestLevel int
 
 const (
@@ -261,39 +218,9 @@ const (
 )
 
 func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
-	var matchedUninter = false
-	var matchedInter = false
-
-	for _, lId := range m.LabelIds {
-		lName := h.Msgs.LabelName(lId)
-		labelIsUninteresting := false
-		for _, labRe := range h.conf.uninterLabelRegexps {
-			idxSlice := labRe.FindStringIndex(lName)
-			if idxSlice != nil {
-				labelIsUninteresting = true
-				break
-			}
-		}
-		matchedUninter = matchedUninter || labelIsUninteresting
-		if labelIsUninteresting {
-			// If the label is explicitly uninteresting, then the "interesting" label
-			// patterns are not applied.
-			continue
-		}
-		for _, labRe := range h.conf.interLabelRegexps {
-			idxSlice := labRe.FindStringIndex(lName)
-			if idxSlice != nil {
-				matchedInter = true
-				break
-			}
-		}
-		if matchedInter {
-			break
-		}
-	}
-	if matchedInter {
+	if h.MsgMatchesCategory(plugin.CategoryInteresting, m) {
 		return Interesting
-	} else if matchedUninter {
+	} else if h.MsgMatchesCategory(plugin.CategoryUninteresting, m) {
 		return Uninteresting
 	}
 	return MaybeInteresting

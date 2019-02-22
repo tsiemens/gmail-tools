@@ -4,10 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
 )
 
 func runAuthCmd(cmd *cobra.Command, args []string) {
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	srv := api.NewGmailClient(api.ModifyScope)
 	NewGmailHelper(srv, api.DefaultUser, conf)
 }

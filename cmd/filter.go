@@ -8,6 +8,7 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
 	"github.com/tsiemens/gmail-tools/filter"
 	"github.com/tsiemens/gmail-tools/filter/template"
 	"github.com/tsiemens/gmail-tools/prnt"
@@ -80,7 +81,7 @@ func runReplaceFilterCmd(cmd *cobra.Command, args []string) {
 	}
 	replStr := args[1]
 
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	srv := api.NewGmailClient(api.FiltersScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 	filters, err := gHelper.GetFilters()
@@ -124,7 +125,7 @@ func runReplaceFilterCmd(cmd *cobra.Command, args []string) {
 }
 
 func runUpdateFilterCmd(cmd *cobra.Command, args []string) {
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	srv := api.NewGmailClient(api.FiltersScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 	filters, err := gHelper.GetFilters()
@@ -184,7 +185,7 @@ func runListFilterCmd(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 	filters, err := gHelper.GetFilters()

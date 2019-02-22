@@ -7,6 +7,7 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -19,11 +20,11 @@ var archiveRead = false
 
 type Archiver struct {
 	srv    *gm.Service
-	conf   *Config
+	conf   *config.Config
 	helper *GmailHelper
 }
 
-func NewArchiver(srv *gm.Service, conf *Config, helper *GmailHelper) *Archiver {
+func NewArchiver(srv *gm.Service, conf *config.Config, helper *GmailHelper) *Archiver {
 	if srv == nil || conf == nil || helper == nil {
 		prnt.StderrLog.Fatalln("Internal error creating Archiver: ", srv, conf, helper)
 	}
@@ -63,7 +64,7 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 }
 
 func runArchiveCmd(cmd *cobra.Command, args []string) {
-	conf := LoadConfig()
+	conf := config.AppConfig()
 
 	srv := api.NewGmailClient(api.ModifyScope)
 

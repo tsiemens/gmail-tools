@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
 	_ "github.com/tsiemens/gmail-tools/filter"
 	"github.com/tsiemens/gmail-tools/prnt"
 )
@@ -38,7 +39,7 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 		prnt.StderrLog.Fatalln("Invalid msgId ''")
 	}
 
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 

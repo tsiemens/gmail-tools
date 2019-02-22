@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/config"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
@@ -36,10 +37,10 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		prnt.StderrLog.Println("No query provided")
 	}
 
-	conf := LoadConfig()
+	conf := config.AppConfig()
 	if searchTouch && conf.ApplyLabelOnTouch == "" {
 		prnt.StderrLog.Fatalf("No ApplyLabelOnTouch property found in %s\n",
-			conf.configFile)
+			conf.ConfigFile)
 	}
 
 	srv := api.NewGmailClient(api.ModifyScope)

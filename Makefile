@@ -1,8 +1,14 @@
-export GOPATH=$(shell echo $$(readlink -f $$(pwd)/../../../..))
+CURDIR=$(shell pwd)
+export GOPATH=$(shell echo $$(readlink -f $(CURDIR)/../../../..))
+
+PLUGINSDIR=$(HOME)/.gmailcli/plugins
 
 build:
 	mkdir -p bld
 	go build -buildmode=plugin -o bld/pluginscore.so ./pluginscore
+	mkdir -p $(PLUGINSDIR)
+	test -L $(PLUGINSDIR)/pluginscore.so || \
+		ln -s $(CURDIR)/bld/pluginscore.so $(PLUGINSDIR)/pluginscore.so
 	go build -o bld/gmailcli main.go
 
 getdeps:

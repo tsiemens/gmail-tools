@@ -25,7 +25,8 @@ const (
 type Plugin struct {
 	Name string
 
-	MatchesCategory func(string, *gm.Message, *api.MsgHelper) bool
+	MatchesCategory                  func(string, *gm.Message, *api.MsgHelper) bool
+	MessageFormatRequiredForCategory func(string) api.MessageFormat
 }
 
 type PluginBuilder func() *Plugin

@@ -15,13 +15,14 @@ type MessageFormat string
 
 // Format values
 const (
-	// Default
+	// Default. Provides all parts of the Payload
 	MessageFormatFull MessageFormat = "full"
 	// Labels only
 	MessageFormatMinimal MessageFormat = "minimal"
 	// Labels and payload data
 	MessageFormatMetadata MessageFormat = "metadata"
-	MessageFormatRaw      MessageFormat = "raw"
+	// Only the Raw. Payload will be nil
+	MessageFormatRaw MessageFormat = "raw"
 )
 
 func (f MessageFormat) ToString() string {
@@ -149,7 +150,7 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, format MessageFormat) (
 		}
 	}
 	var err error
-	newMsgs, err = h.fetchMessages(newMsgs, MessageFormatMetadata)
+	newMsgs, err = h.fetchMessages(newMsgs, format)
 	if err != nil {
 		return nil, err
 	}
