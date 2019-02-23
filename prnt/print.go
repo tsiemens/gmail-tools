@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 var StderrLog = log.New(os.Stderr, "", 0)
@@ -84,6 +85,34 @@ func Println(v ...interface{}) {
 	LPrintln(Always, v...)
 }
 
+type Printer struct {
+	level     PrintType
+	humanOnly bool
+}
+
+func (p *Printer) P(v ...interface{}) {
+	LHPrint(p.level, p.humanOnly, v...)
+}
+func (p *Printer) F(format string, v ...interface{}) {
+	LHPrintf(p.level, p.humanOnly, format, v...)
+}
+
+func (p *Printer) Ln(v ...interface{}) {
+	LHPrintln(p.level, p.humanOnly, v...)
+}
+
+type PrinterWrapper struct {
+	Always  Printer
+	Quiet   Printer
+	Verbose Printer
+	Debug   Printer
+}
+
+var Hum PrinterWrapper
+var Quiet Printer
+var Verb Printer
+var Deb Printer
+
 const (
 	bold      = "\033[1m"
 	resetC    = "\033[0m"
@@ -98,6 +127,16 @@ const (
 var Colors map[string]string
 
 func init() {
+	Hum = PrinterWrapper{
+		Always:  Printer{Always, true},
+		Quiet:   Printer{Quietable, true},
+		Verbose: Printer{Verbose, true},
+		Debug:   Printer{Debug, true},
+	}
+	Quiet = Printer{Quietable, false}
+	Verb = Printer{Verbose, false}
+	Deb = Printer{Debug, false}
+
 	Colors = map[string]string{
 		"bold":    bold,
 		"reset":   resetC,
@@ -129,4 +168,27 @@ func Fg(colorKey string) string {
 
 func Colorize(str, colorKey string) string {
 	return Fg(colorKey) + str + Fg("reset")
+}
+
+type ProgressPrinter struct {
+	total       int
+	current     int
+	previousLen int
+}
+
+func NewProgressPrinter(total int) *ProgressPrinter {
+	return &ProgressPrinter{total: total, current: 0, previousLen: 0}
+}
+
+// n: The number of units to increment.
+func (p *ProgressPrinter) Progress(n int) {
+	if p.previousLen > 0 {
+		// Reset previous
+		Hum.Always.P(strings.Repeat("\x08", p.previousLen))
+	}
+
+	p.current += n
+	progressStr := fmt.Sprintf("%d/%d", p.current, p.total)
+	p.previousLen = len(progressStr)
+	Hum.Always.P(progressStr)
 }

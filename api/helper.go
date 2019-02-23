@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -144,11 +143,10 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 
 	var detailedMsgs []*gm.Message
 
-	printLvl := prnt.Always
-	prnt.HPrint(printLvl, "Loading message details ")
-	for i, msg := range msgs {
-		progressStr := fmt.Sprintf("%d/%d", i+1, len(msgs))
-		prnt.HPrint(printLvl, progressStr)
+	prnt.Hum.Always.P("Loading message details ")
+	progP := prnt.NewProgressPrinter(len(msgs))
+	for _, msg := range msgs {
+		progP.Progress(1)
 
 		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).
 			Format(format.ToString()).Do()
@@ -156,9 +154,8 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 			return nil, fmt.Errorf("Failed to get message: %v", err)
 		}
 		detailedMsgs = append(detailedMsgs, dMsg)
-		prnt.HPrint(printLvl, strings.Repeat("\x08", len(progressStr)))
 	}
-	prnt.HPrint(printLvl, "\n")
+	prnt.Hum.Always.P("\n")
 
 	return detailedMsgs, nil
 }
