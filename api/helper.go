@@ -16,17 +16,45 @@ type MessageFormat string
 // Format values
 const (
 	// Default. Provides all parts of the Payload
-	MessageFormatFull MessageFormat = "full"
+	messageFormatFull MessageFormat = "full"
 	// Labels only
-	MessageFormatMinimal MessageFormat = "minimal"
+	messageFormatMinimal MessageFormat = "minimal"
 	// Labels and payload data
-	MessageFormatMetadata MessageFormat = "metadata"
+	messageFormatMetadata MessageFormat = "metadata"
 	// Only the Raw. Payload will be nil
 	MessageFormatRaw MessageFormat = "raw"
 )
 
 func (f MessageFormat) ToString() string {
 	return string(f)
+}
+
+type MessageDetailLevel int
+
+const (
+	IdsOnly MessageDetailLevel = iota
+	LabelsOnly
+	LabelsAndPayload
+)
+
+func (dl MessageDetailLevel) Format() MessageFormat {
+	var format MessageFormat
+	switch dl {
+	case IdsOnly:
+		format = messageFormatMinimal
+	case LabelsOnly:
+		format = messageFormatMetadata
+	case LabelsAndPayload:
+		format = messageFormatFull
+	}
+	return format
+}
+
+func MoreDetailedLevel(a, b MessageDetailLevel) MessageDetailLevel {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 type AccountHelper struct {
@@ -135,7 +163,7 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 	return detailedMsgs, nil
 }
 
-func (h *MsgHelper) LoadMessages(msgs []*gm.Message, format MessageFormat) (
+func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) (
 	[]*gm.Message, error) {
 
 	cache := h.getLoadedCache()
@@ -150,7 +178,7 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, format MessageFormat) (
 		}
 	}
 	var err error
-	newMsgs, err = h.fetchMessages(newMsgs, format)
+	newMsgs, err = h.fetchMessages(newMsgs, detail.Format())
 	if err != nil {
 		return nil, err
 	}
@@ -162,14 +190,6 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, format MessageFormat) (
 func (h *MsgHelper) LoadMessage(id string) (*gm.Message, error) {
 	return h.srv.Users.Messages.Get(h.User, id).Do()
 }
-
-type MessageDetailLevel int
-
-const (
-	IdsOnly MessageDetailLevel = iota
-	LabelsOnly
-	LabelsAndPayload
-)
 
 /* Query the server for messages.
  * maxMsgs: a value greater than 0 to apply a max
@@ -222,7 +242,7 @@ func (h *MsgHelper) QueryMessages(
 
 	if detailLevel != IdsOnly {
 		var err error
-		msgs, err = h.fetchMessages(msgs, MessageFormatMetadata)
+		msgs, err = h.fetchMessages(msgs, detailLevel.Format())
 		if err != nil {
 			return nil, err
 		}

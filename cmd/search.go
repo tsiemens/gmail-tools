@@ -54,9 +54,11 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	hasLoadedMsgDetails := false
 
+	requiredDetail := gHelper.MsgInterestRequiredDetail()
+
 	if searchInteresting || searchUninteresting {
 		var filteredMsgs []*gm.Message
-		msgs, err = gHelper.Msgs.LoadMessages(msgs, api.MessageFormatMetadata)
+		msgs, err = gHelper.Msgs.LoadMessages(msgs, requiredDetail)
 		util.CheckErr(err)
 		for _, msg := range msgs {
 			msgInterest := gHelper.MsgInterest(msg)
@@ -82,7 +84,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 			}
 		} else {
 			if !hasLoadedMsgDetails {
-				msgs, err = gHelper.Msgs.LoadMessages(msgs, api.MessageFormatMetadata)
+				msgs, err = gHelper.Msgs.LoadMessages(msgs, requiredDetail)
 				util.CheckErr(err)
 				hasLoadedMsgDetails = true
 			}

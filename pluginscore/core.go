@@ -54,10 +54,15 @@ func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 	return false
 }
 
+func detailRequiredForCategory(string) api.MessageDetailLevel {
+	return api.LabelsAndPayload
+}
+
 func builder() *plugin.Plugin {
 	return &plugin.Plugin{
-		Name:            "Sample",
-		MatchesCategory: matchesCategory,
+		Name:                      "Sample",
+		MatchesCategory:           matchesCategory,
+		DetailRequiredForCategory: detailRequiredForCategory,
 	}
 }
 

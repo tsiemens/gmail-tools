@@ -217,6 +217,23 @@ const (
 	Interesting
 )
 
+func (h *GmailHelper) MsgInterestRequiredDetail() api.MessageDetailLevel {
+	if h.plugins == nil {
+		h.plugins = plugin.LoadPlugins()
+	}
+
+	detail := api.LabelsOnly
+	for _, plug := range h.plugins {
+		detail = api.MoreDetailedLevel(
+			detail,
+			plug.DetailRequiredForCategory(plugin.CategoryInteresting))
+		detail = api.MoreDetailedLevel(
+			detail,
+			plug.DetailRequiredForCategory(plugin.CategoryUninteresting))
+	}
+	return detail
+}
+
 func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
 	if h.MsgMatchesCategory(plugin.CategoryInteresting, m) {
 		return Interesting
