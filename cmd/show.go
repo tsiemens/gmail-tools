@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/base64"
 	"fmt"
-	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -20,15 +17,6 @@ var showTouch = false
 var showHeadersOnly = false
 var showBrief = false
 
-func decodePartBody(part *gm.MessagePart) string {
-	data := part.Body.Data
-	decoder := base64.NewDecoder(base64.URLEncoding, strings.NewReader(data))
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(decoder)
-	b := buf.Bytes()
-	return string(b[:])
-}
-
 func runShowCmd(cmd *cobra.Command, args []string) {
 	if showHeadersOnly && showBrief {
 		prnt.StderrLog.Fatalln("-b and -H are mutually exclusive")
@@ -43,7 +31,7 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
-	msg, err := gHelper.Msgs.LoadMessage(msgId)
+	msg, err := gHelper.Msgs.GetMessage(msgId, api.LabelsAndPayload)
 	if err != nil {
 		prnt.StderrLog.Fatalf("%v\n", err)
 	}
@@ -56,10 +44,8 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 		}
 
 		if !showHeadersOnly {
-			fmt.Println(decodePartBody(msg.Payload))
-			for _, part := range msg.Payload.Parts {
-				// For multipart messages
-				fmt.Println(decodePartBody(part))
+			for _, part := range api.GetMessageBody(msg) {
+				fmt.Println(part)
 			}
 		}
 	}

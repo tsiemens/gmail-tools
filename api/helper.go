@@ -56,6 +56,17 @@ func MoreDetailedLevel(a, b MessageDetailLevel) MessageDetailLevel {
 	return b
 }
 
+func MessageMeetsDetailLevel(msg *gm.Message, detail MessageDetailLevel) bool {
+	switch detail {
+	case IdsOnly:
+		return true
+	case LabelsOnly:
+		return msg.LabelIds != nil && len(msg.LabelIds) > 0
+	case LabelsAndPayload:
+	}
+	return MessageHasBody(msg)
+}
+
 type AccountHelper struct {
 	User string
 
@@ -81,13 +92,19 @@ type MsgHelper struct {
 	labels map[string]string // Label ID to label name
 
 	cache *Cache
+	// These are not cached, because they can change between queries
+	loadedThreads map[string]*gm.Thread
 }
 
 func NewMsgHelper(user string, srv *gm.Service) *MsgHelper {
-	return &MsgHelper{User: user, srv: srv}
+	return &MsgHelper{
+		User:          user,
+		srv:           srv,
+		loadedThreads: make(map[string]*gm.Thread),
+	}
 }
 
-func (h *MsgHelper) getLoadedCache() *Cache {
+func (h *MsgHelper) getCache() *Cache {
 	if h.cache == nil {
 		h.cache = NewCache()
 		h.cache.LoadMsgs()
@@ -160,15 +177,36 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 	return detailedMsgs, nil
 }
 
+func (h *MsgHelper) fetchThreads(threads []*gm.Thread, detail MessageDetailLevel,
+) ([]*gm.Thread, error) {
+
+	var detailedThreads []*gm.Thread
+
+	prnt.Hum.Always.P("Loading message details by thread")
+	progP := prnt.NewProgressPrinter(len(threads))
+	for _, t := range threads {
+		progP.Progress(1)
+
+		dThread, err := h.GetThread(t.Id, detail)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get thread: %v", err)
+		}
+		detailedThreads = append(detailedThreads, dThread)
+	}
+	prnt.Hum.Always.P("\n")
+
+	return detailedThreads, nil
+}
+
 func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) (
 	[]*gm.Message, error) {
 
-	cache := h.getLoadedCache()
+	cache := h.getCache()
 
 	newMsgs := make([]*gm.Message, 0, len(msgs))
 	cachedMsgs := make([]*gm.Message, 0, len(msgs))
 	for _, msg := range msgs {
-		if cMsg, ok := cache.Msgs[msg.Id]; ok {
+		if cMsg, ok := cache.Msg(msg.Id); ok {
 			cachedMsgs = append(cachedMsgs, cMsg)
 		} else {
 			newMsgs = append(newMsgs, msg)
@@ -180,12 +218,56 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) 
 		return nil, err
 	}
 	cache.UpdateMsgs(newMsgs)
-	cache.WriteMsgs()
 	return append(cachedMsgs, newMsgs...), nil
 }
 
-func (h *MsgHelper) LoadMessage(id string) (*gm.Message, error) {
-	return h.srv.Users.Messages.Get(h.User, id).Do()
+func (h *MsgHelper) GetMessage(id string, detail MessageDetailLevel,
+) (*gm.Message, error) {
+	cache := h.getCache()
+	cachedMsg, ok := cache.Msg(id)
+	if ok && MessageMeetsDetailLevel(cachedMsg, detail) {
+		// If the message was in the cache, and it was previously stored in full,
+		// we can return it. Otherwise, we need to load the full version
+		return cachedMsg, nil
+	}
+
+	return h.loadMessage(id, detail)
+}
+
+func (h *MsgHelper) loadMessage(id string, detail MessageDetailLevel,
+) (*gm.Message, error) {
+	msg, err := h.srv.Users.Messages.Get(h.User, id).Do()
+	if err == nil {
+		h.getCache().UpdateMsg(msg)
+	}
+	return msg, err
+}
+
+func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
+	if preloadedThread, ok := h.loadedThreads[id]; ok {
+		return preloadedThread, nil
+	}
+	// Note that this will never load the full message texts.
+	thread, err := h.srv.Users.Threads.Get(h.User, id).Do()
+	if err != nil {
+		return nil, err
+	}
+	h.loadedThreads[thread.Id] = thread
+	return thread, nil
+}
+
+// Loads the thread and caches its messages
+func (h *MsgHelper) GetThread(id string, detail MessageDetailLevel,
+) (*gm.Thread, error) {
+	thread, err := h.getJustThread(id)
+	for _, msg := range thread.Messages {
+		// Simply pre-loads the messages into the cache at the desired level.
+		_, err = h.GetMessage(msg.Id, detail)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return thread, nil
 }
 
 /* Query the server for messages.
@@ -245,6 +327,60 @@ func (h *MsgHelper) QueryMessages(
 		}
 	}
 	return msgs, nil
+}
+
+func (h *MsgHelper) QueryThreads(
+	query string, inboxOnly bool, unreadOnly bool, maxEntries int64,
+	detailLevel MessageDetailLevel) ([]*gm.Thread, error) {
+
+	fullQuery := ""
+	if inboxOnly {
+		fullQuery += "in:inbox "
+	}
+	if unreadOnly {
+		fullQuery += "label:unread "
+	}
+
+	fullQuery += query
+
+	pageToken := ""
+	queriedPageCnt := 0
+	// These threads will only have their own id, and not the message ids
+	var threadShells []*gm.Thread
+
+	for queriedPageCnt == 0 || pageToken != "" {
+		queriedPageCnt++
+		util.Debugf("Querying messages: '%s', page: %d\n", fullQuery, queriedPageCnt)
+
+		call := h.srv.Users.Threads.List(h.User).Q(fullQuery)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		if maxEntries > 0 {
+			call = call.MaxResults(maxEntries)
+		}
+		r, err := call.Do()
+		if err != nil {
+			return nil, fmt.Errorf("Unable to get messages: %v", err)
+		}
+
+		pageToken = r.NextPageToken
+
+		for _, t := range r.Threads {
+			threadShells = append(threadShells, t)
+			if maxEntries > 0 && int64(len(threadShells)) == maxEntries {
+				// Signal no more pages that we want to read.
+				pageToken = ""
+				break
+			}
+		}
+	}
+
+	threads, err := h.fetchThreads(threadShells, detailLevel)
+	if err != nil {
+		return nil, err
+	}
+	return threads, nil
 }
 
 func (h *MsgHelper) LabelIdFromName(label string) string {

@@ -64,6 +64,7 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	util.RunCleanupHandlers()
 }
 
 func init() {
@@ -107,6 +108,7 @@ func onInit() {
 
 	if ClearCache {
 		cache := api.NewCache()
+		defer cache.Close()
 		cache.Clear()
 	}
 
