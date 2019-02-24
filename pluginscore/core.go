@@ -17,14 +17,18 @@ func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 		prnt.StderrLog.Println("core.matchesCategory error:", err)
 		return false
 	}
+	threadLabelNames, err := helper.ThreadLabelNames(m.ThreadId)
+	if err != nil {
+		prnt.StderrLog.Println("core.matchesCategory error:", err)
+		return false
+	}
 
 	// Interesting and uninteresting are special categories.
 	// If we say something is uninteresting, but it ends up also being
 	// interesting, interesting category will supersede uninsteresting.
 	// This logic is driven by the app core logic.
 	if cat == plugin.CategoryInteresting {
-		for _, lId := range m.LabelIds {
-			lName := helper.LabelName(lId)
+		for _, lName := range threadLabelNames {
 			labelIsUninteresting := false
 			for _, labRe := range conf.UninterLabelRegexps {
 				idxSlice := labRe.FindStringIndex(lName)
@@ -48,8 +52,7 @@ func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 		return false
 	} else if cat == plugin.CategoryUninteresting {
 		prnt.Deb.Ln("finding uninteresting labels...")
-		for _, lId := range m.LabelIds {
-			lName := helper.LabelName(lId)
+		for _, lName := range threadLabelNames {
 			for _, labRe := range conf.UninterLabelRegexps {
 				idxSlice := labRe.FindStringIndex(lName)
 				if idxSlice != nil {
@@ -63,12 +66,12 @@ func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 }
 
 func detailRequiredForCategory(string) api.MessageDetailLevel {
-	return api.LabelsAndPayload
+	return api.LabelsOnly
 }
 
 func builder() *plugin.Plugin {
 	return &plugin.Plugin{
-		Name:                      "Sample",
+		Name:                      "Core",
 		MatchesCategory:           matchesCategory,
 		DetailRequiredForCategory: detailRequiredForCategory,
 	}

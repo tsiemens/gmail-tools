@@ -144,7 +144,7 @@ func (h *MsgHelper) LabelName(lblId string) string {
 
 func (h *MsgHelper) LabelNames(ids []string) []string {
 	h.requireLabels()
-	var lNames []string
+	lNames := make([]string, 0, len(ids))
 	for _, lId := range ids {
 		lNames = append(lNames, h.labels[lId])
 	}
@@ -153,6 +153,40 @@ func (h *MsgHelper) LabelNames(ids []string) []string {
 
 func (h *MsgHelper) MessageLabelNames(m *gm.Message) []string {
 	return h.LabelNames(m.LabelIds)
+}
+
+func (h *MsgHelper) ThreadLabelNames(threadId string) ([]string, error) {
+	thread, err := h.GetThread(threadId, IdsOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	labelIdSet := make(map[string]bool) // Just used as a set
+	// Grab the first and last message, since they should be fine to infer the labels
+	// on the thread. Otherwise, very long threads take a long time to load.
+	// The general case is when we receive a message, label it, and then a followup
+	// appears, and we want to treat it with the same label.
+	msgs := make([]*gm.Message, 0, 2)
+	msgs = append(msgs, thread.Messages[0])
+	if len(thread.Messages) > 1 {
+		msgs = append(msgs, thread.Messages[len(thread.Messages)-1])
+	}
+	for _, msg := range msgs {
+		msg, err = h.GetMessage(msg.Id, LabelsOnly)
+		if err != nil {
+			return nil, err
+		}
+		for _, lId := range msg.LabelIds {
+			labelIdSet[lId] = true
+		}
+	}
+
+	labelIds := make([]string, 0, len(labelIdSet))
+	for lId := range labelIdSet {
+		labelIds = append(labelIds, lId)
+	}
+
+	return h.LabelNames(labelIds), nil
 }
 
 func (h *MsgHelper) fetchMessages(msgs []*gm.Message, detail MessageDetailLevel) (
@@ -260,11 +294,13 @@ func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
 func (h *MsgHelper) GetThread(id string, detail MessageDetailLevel,
 ) (*gm.Thread, error) {
 	thread, err := h.getJustThread(id)
-	for _, msg := range thread.Messages {
-		// Simply pre-loads the messages into the cache at the desired level.
-		_, err = h.GetMessage(msg.Id, detail)
-		if err != nil {
-			return nil, err
+	if detail != IdsOnly {
+		for _, msg := range thread.Messages {
+			// Simply pre-loads the messages into the cache at the desired level.
+			_, err = h.GetMessage(msg.Id, detail)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return thread, nil
