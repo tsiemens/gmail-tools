@@ -199,6 +199,7 @@ func (h *GmailHelper) FilterMessagesByCategory(cat string, msgs []*gm.Message,
 	matchedMsgs := make([]*gm.Message, 0)
 	detail := h.RequiredDetailForPlugins(cat)
 
+	// TODO categorize by thread
 	prnt.Hum.Always.P("Categorising messages ")
 	progP := prnt.NewProgressPrinter(len(msgs))
 	for _, msg := range msgs {

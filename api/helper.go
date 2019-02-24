@@ -155,7 +155,7 @@ func (h *MsgHelper) MessageLabelNames(m *gm.Message) []string {
 	return h.LabelNames(m.LabelIds)
 }
 
-func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
+func (h *MsgHelper) fetchMessages(msgs []*gm.Message, detail MessageDetailLevel) (
 	[]*gm.Message, error) {
 
 	var detailedMsgs []*gm.Message
@@ -165,8 +165,7 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, format MessageFormat) (
 	for _, msg := range msgs {
 		progP.Progress(1)
 
-		dMsg, err := h.srv.Users.Messages.Get(h.User, msg.Id).
-			Format(format.ToString()).Do()
+		dMsg, err := h.GetMessage(msg.Id, detail)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to get message: %v", err)
 		}
@@ -213,7 +212,7 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) 
 		}
 	}
 	var err error
-	newMsgs, err = h.fetchMessages(newMsgs, detail.Format())
+	newMsgs, err = h.fetchMessages(newMsgs, detail)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +321,7 @@ func (h *MsgHelper) QueryMessages(
 
 	if detailLevel != IdsOnly {
 		var err error
-		msgs, err = h.fetchMessages(msgs, detailLevel.Format())
+		msgs, err = h.fetchMessages(msgs, detailLevel)
 		if err != nil {
 			return nil, err
 		}
