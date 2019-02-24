@@ -192,22 +192,42 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 
 }
 
-func (h *GmailHelper) FilterMessagesByCategory(cat string, msgs []*gm.Message,
+func (h *GmailHelper) FilterMessagesByCategory(
+	cat string, msgs []*gm.Message, categorizeThreads bool,
 ) ([]*gm.Message, error) {
-	// Keyed by ThreadId. Bool is just a placeholder
-	matchedThreads := make(map[string]bool)
 	matchedMsgs := make([]*gm.Message, 0)
 	detail := h.RequiredDetailForPlugins(cat)
 
-	// TODO categorize by thread
-	prnt.Hum.Always.P("Categorising messages ")
-	progP := prnt.NewProgressPrinter(len(msgs))
-	for _, msg := range msgs {
-		progP.Progress(1)
-		if _, ok := matchedThreads[msg.ThreadId]; ok {
-			// We've already classified this thread.
-			matchedMsgs = append(matchedMsgs, msg)
-		} else {
+	if categorizeThreads {
+		// If any messages matches the category, then the whole thread does.
+		msgsByThread := api.MessagesByThread(msgs)
+		prnt.Hum.Always.P("Categorising threads ")
+		progP := prnt.NewProgressPrinter(len(msgsByThread))
+		for _, threadMsgs := range msgsByThread {
+			progP.Progress(1)
+			threadMatched := false
+			for _, msg := range threadMsgs {
+				msg, err := h.Msgs.GetMessage(msg.Id, detail)
+				if err != nil {
+					return nil, err
+				}
+				if h.MsgMatchesCategory(cat, msg) {
+					threadMatched = true
+					break
+				}
+			}
+
+			if threadMatched {
+				for _, msg := range threadMsgs {
+					matchedMsgs = append(matchedMsgs, msg)
+				}
+			}
+		}
+	} else {
+		prnt.Hum.Always.P("Categorising messages ")
+		progP := prnt.NewProgressPrinter(len(msgs))
+		for _, msg := range msgs {
+			progP.Progress(1)
 			msg, err := h.Msgs.GetMessage(msg.Id, detail)
 			if err != nil {
 				return nil, err
@@ -217,8 +237,8 @@ func (h *GmailHelper) FilterMessagesByCategory(cat string, msgs []*gm.Message,
 			}
 		}
 	}
-	prnt.Hum.Always.P("\n")
 
+	prnt.Hum.Always.P("\n")
 	return matchedMsgs, nil
 }
 
@@ -227,9 +247,9 @@ func (h *GmailHelper) FilterMessagesByInterest(
 
 	switch interest {
 	case Interesting:
-		return h.FilterMessagesByCategory(plugin.CategoryInteresting, msgs)
+		return h.FilterMessagesByCategory(plugin.CategoryInteresting, msgs, true)
 	case Uninteresting:
-		return h.FilterMessagesByCategory(plugin.CategoryUninteresting, msgs)
+		return h.FilterMessagesByCategory(plugin.CategoryUninteresting, msgs, true)
 	case MaybeInteresting:
 	}
 	prnt.StderrLog.Fatalln("Cannot filter by MaybeInteresting")
