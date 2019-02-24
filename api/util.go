@@ -43,3 +43,15 @@ func GetMessageBody(msg *gm.Message) []string {
 func MessageHasBody(msg *gm.Message) bool {
 	return msg.Payload != nil && msg.Payload.Body != nil
 }
+
+func MessagesByThread(msgs []*gm.Message) map[string][]*gm.Message {
+	threads := make(map[string][]*gm.Message)
+	for _, msg := range msgs {
+		if tMsgs, ok := threads[msg.ThreadId]; ok {
+			threads[msg.ThreadId] = append(tMsgs, msg)
+		} else {
+			threads[msg.ThreadId] = []*gm.Message{msg}
+		}
+	}
+	return threads
+}

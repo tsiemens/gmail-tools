@@ -6,10 +6,17 @@ import (
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/config"
 	"github.com/tsiemens/gmail-tools/plugin"
+	"github.com/tsiemens/gmail-tools/prnt"
 )
 
 func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 	conf := config.AppConfig()
+
+	m, err := helper.GetMessage(m.Id, api.LabelsOnly)
+	if err != nil {
+		prnt.StderrLog.Println("core.matchesCategory error:", err)
+		return false
+	}
 
 	// Interesting and uninteresting are special categories.
 	// If we say something is uninteresting, but it ends up also being
@@ -40,6 +47,7 @@ func matchesCategory(cat string, m *gm.Message, helper *api.MsgHelper) bool {
 		}
 		return false
 	} else if cat == plugin.CategoryUninteresting {
+		prnt.Deb.Ln("finding uninteresting labels...")
 		for _, lId := range m.LabelIds {
 			lName := helper.LabelName(lId)
 			for _, labRe := range conf.UninterLabelRegexps {

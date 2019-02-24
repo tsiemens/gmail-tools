@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	gm "google.golang.org/api/gmail/v1"
+	// gm "google.golang.org/api/gmail/v1"
 
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
@@ -57,18 +57,16 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	requiredDetail := gHelper.MsgInterestRequiredDetail()
 
 	if searchInteresting || searchUninteresting {
-		var filteredMsgs []*gm.Message
-		msgs, err = gHelper.Msgs.LoadMessages(msgs, requiredDetail)
-		util.CheckErr(err)
-		for _, msg := range msgs {
-			msgInterest := gHelper.MsgInterest(msg)
-			if (searchInteresting && msgInterest == Interesting) ||
-				(searchUninteresting && msgInterest == Uninteresting) {
-				filteredMsgs = append(filteredMsgs, msg)
-			}
+		var interest InterestLevel
+		if searchInteresting {
+			interest = Interesting
+		} else {
+			interest = Uninteresting
 		}
+		msgs, err = gHelper.FilterMessagesByInterest(interest, msgs)
+		util.CheckErr(err)
+
 		hasLoadedMsgDetails = true
-		msgs = filteredMsgs
 	}
 
 	if len(msgs) == 0 {

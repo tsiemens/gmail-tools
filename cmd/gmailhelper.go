@@ -192,16 +192,62 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 
 }
 
+func (h *GmailHelper) FilterMessagesByCategory(cat string, msgs []*gm.Message,
+) ([]*gm.Message, error) {
+	// Keyed by ThreadId. Bool is just a placeholder
+	matchedThreads := make(map[string]bool)
+	matchedMsgs := make([]*gm.Message, 0)
+	detail := h.RequiredDetailForPlugins(cat)
+
+	prnt.Hum.Always.P("Categorising messages ")
+	progP := prnt.NewProgressPrinter(len(msgs))
+	for _, msg := range msgs {
+		progP.Progress(1)
+		if _, ok := matchedThreads[msg.ThreadId]; ok {
+			// We've already classified this thread.
+			matchedMsgs = append(matchedMsgs, msg)
+		} else {
+			msg, err := h.Msgs.GetMessage(msg.Id, detail)
+			if err != nil {
+				return nil, err
+			}
+			if h.MsgMatchesCategory(cat, msg) {
+				matchedMsgs = append(matchedMsgs, msg)
+			}
+		}
+	}
+	prnt.Hum.Always.P("\n")
+
+	return matchedMsgs, nil
+}
+
+func (h *GmailHelper) FilterMessagesByInterest(
+	interest InterestLevel, msgs []*gm.Message) ([]*gm.Message, error) {
+
+	switch interest {
+	case Interesting:
+		return h.FilterMessagesByCategory(plugin.CategoryInteresting, msgs)
+	case Uninteresting:
+		return h.FilterMessagesByCategory(plugin.CategoryUninteresting, msgs)
+	case MaybeInteresting:
+	}
+	prnt.StderrLog.Fatalln("Cannot filter by MaybeInteresting")
+	return nil, nil
+}
+
 func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
 	return h.Msgs.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
 }
 
-func (h *GmailHelper) MsgMatchesCategory(cat string, m *gm.Message) bool {
+func (h *GmailHelper) GetPlugins() []*plugin.Plugin {
 	if h.plugins == nil {
 		h.plugins = plugin.LoadPlugins()
 	}
+	return h.plugins
+}
 
-	for _, plug := range h.plugins {
+func (h *GmailHelper) MsgMatchesCategory(cat string, m *gm.Message) bool {
+	for _, plug := range h.GetPlugins() {
 		if plug.MatchesCategory(cat, m, h.Msgs) {
 			return true
 		}
@@ -217,20 +263,22 @@ const (
 	Interesting
 )
 
-func (h *GmailHelper) MsgInterestRequiredDetail() api.MessageDetailLevel {
-	if h.plugins == nil {
-		h.plugins = plugin.LoadPlugins()
-	}
-
+func (h *GmailHelper) RequiredDetailForPlugins(cat string) api.MessageDetailLevel {
 	detail := api.LabelsOnly
-	for _, plug := range h.plugins {
+	for _, plug := range h.GetPlugins() {
 		detail = api.MoreDetailedLevel(
 			detail,
-			plug.DetailRequiredForCategory(plugin.CategoryInteresting))
-		detail = api.MoreDetailedLevel(
-			detail,
-			plug.DetailRequiredForCategory(plugin.CategoryUninteresting))
+			plug.DetailRequiredForCategory(cat))
 	}
+	return detail
+}
+
+func (h *GmailHelper) MsgInterestRequiredDetail() api.MessageDetailLevel {
+	detail := h.RequiredDetailForPlugins(plugin.CategoryInteresting)
+	detail = api.MoreDetailedLevel(
+		detail,
+		h.RequiredDetailForPlugins(plugin.CategoryUninteresting),
+	)
 	return detail
 }
 

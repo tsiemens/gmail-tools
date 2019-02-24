@@ -236,6 +236,7 @@ func (h *MsgHelper) GetMessage(id string, detail MessageDetailLevel,
 
 func (h *MsgHelper) loadMessage(id string, detail MessageDetailLevel,
 ) (*gm.Message, error) {
+	prnt.Deb.Ln("Loading msg", id, "at level", detail)
 	msg, err := h.srv.Users.Messages.Get(h.User, id).Do()
 	if err == nil {
 		h.getCache().UpdateMsg(msg)
@@ -445,4 +446,15 @@ func (h *MsgHelper) ApplyLabels(msgs []*gm.Message, labelNames []string) error {
 		AddLabelIds: labelIds,
 	}
 	return h.BatchModifyMessages(msgs, &modReq)
+}
+
+func (h *MsgHelper) ApplyLabelsToThreads(threads []*gm.Thread, labelNames []string) error {
+	allMsgs := make([]*gm.Message, 0, len(threads))
+	for _, thread := range threads {
+		for _, msg := range thread.Messages {
+			allMsgs = append(allMsgs, msg)
+		}
+	}
+
+	return h.ApplyLabels(allMsgs, labelNames)
 }
