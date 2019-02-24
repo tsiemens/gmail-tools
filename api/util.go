@@ -9,6 +9,13 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 )
 
+// A wrapper for a message Id that can be passed by reference.
+// This helps save a little space, and reduces confusion about what contents
+// a message contains when returned from certain functions.
+type MessageId struct {
+	Id string
+}
+
 var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
 
 func GetFromName(fromHeaderVal string) string {
@@ -44,13 +51,13 @@ func MessageHasBody(msg *gm.Message) bool {
 	return msg.Payload != nil && msg.Payload.Body != nil
 }
 
-func MessagesByThread(msgs []*gm.Message) map[string][]*gm.Message {
-	threads := make(map[string][]*gm.Message)
+func MessagesByThread(msgs []*gm.Message) map[string][]*MessageId {
+	threads := make(map[string][]*MessageId)
 	for _, msg := range msgs {
 		if tMsgs, ok := threads[msg.ThreadId]; ok {
-			threads[msg.ThreadId] = append(tMsgs, msg)
+			threads[msg.ThreadId] = append(tMsgs, &MessageId{msg.Id})
 		} else {
-			threads[msg.ThreadId] = []*gm.Message{msg}
+			threads[msg.ThreadId] = []*MessageId{&MessageId{msg.Id}}
 		}
 	}
 	return threads

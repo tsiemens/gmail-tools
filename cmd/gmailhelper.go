@@ -218,7 +218,11 @@ func (h *GmailHelper) FilterMessagesByCategory(
 			}
 
 			if threadMatched {
-				for _, msg := range threadMsgs {
+				for _, msgId := range threadMsgs {
+					msg, err := h.Msgs.GetMessage(msgId.Id, detail)
+					if err != nil {
+						return nil, err
+					}
 					matchedMsgs = append(matchedMsgs, msg)
 				}
 			}
@@ -228,7 +232,8 @@ func (h *GmailHelper) FilterMessagesByCategory(
 		progP := prnt.NewProgressPrinter(len(msgs))
 		for _, msg := range msgs {
 			progP.Progress(1)
-			msg, err := h.Msgs.GetMessage(msg.Id, detail)
+			var err error
+			msg, err = h.Msgs.GetMessage(msg.Id, detail)
 			if err != nil {
 				return nil, err
 			}
