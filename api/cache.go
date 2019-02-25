@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/gob"
 	"os"
+	"sync"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -22,6 +23,8 @@ type Cache struct {
 	storedMsgs map[string]*gm.Message
 	newMsgs    map[string]*gm.Message
 	closed     bool
+
+	mutex sync.RWMutex
 }
 
 func NewCache() *Cache {
@@ -47,6 +50,9 @@ func (c *Cache) cacheExists(fname string) bool {
 }
 
 func (c *Cache) Msg(id string) (*gm.Message, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	msg, ok := c.newMsgs[id]
 	if ok {
 		return msg, true
@@ -59,6 +65,9 @@ func (c *Cache) Msg(id string) (*gm.Message, bool) {
 }
 
 func (c *Cache) LoadMsgs() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	fname := c.msgCacheName()
 	if !c.cacheExists(fname) {
 		return
@@ -90,7 +99,7 @@ func (c *Cache) writeStoredMsgs() {
 	w.Flush()
 }
 
-func (c *Cache) Write() {
+func (c *Cache) write() {
 	if len(c.newMsgs) == 0 {
 		prnt.Deb.Ln("Cache::WriteMsg no new messages to write")
 		return
@@ -127,20 +136,38 @@ func (c *Cache) Write() {
 	c.writeStoredMsgs()
 }
 
-func (c *Cache) UpdateMsg(msg *gm.Message) {
+func (c *Cache) Write() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.write()
+}
+
+func (c *Cache) updateMsg(msg *gm.Message) {
 	if _, ok := c.storedMsgs[msg.Id]; ok {
 		delete(c.storedMsgs, msg.Id)
 	}
 	c.newMsgs[msg.Id] = msg
 }
 
+func (c *Cache) UpdateMsg(msg *gm.Message) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.updateMsg(msg)
+}
+
 func (c *Cache) UpdateMsgs(msgs []*gm.Message) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	for _, msg := range msgs {
-		c.UpdateMsg(msg)
+		c.updateMsg(msg)
 	}
 }
 
 func (c *Cache) Clear() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	fname := c.msgCacheName()
 	if !c.cacheExists(fname) {
 		return
@@ -152,12 +179,14 @@ func (c *Cache) Clear() {
 
 // Implements io.Closer interface
 func (c *Cache) Close() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if c.closed {
 		return nil
 	}
 	prnt.Deb.F("%p Cache::Close\n", c)
 	util.UnregisterCleanupHandler(c)
-	c.Write()
+	c.write()
 	c.closed = true
 	return nil
 }
