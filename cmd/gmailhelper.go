@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -27,6 +28,8 @@ type GmailHelper struct {
 	conf *config.Config
 
 	plugins []*plugin.Plugin
+
+	mutex sync.Mutex
 }
 
 func NewGmailHelper(srv *gm.Service, user string, conf *config.Config) *GmailHelper {
@@ -199,35 +202,59 @@ func (h *GmailHelper) FilterMessagesByCategory(
 	detail := h.RequiredDetailForPlugins(cat)
 
 	if categorizeThreads {
+		msgChan := make(chan []*gm.Message, 100)
+		errChan := make(chan error, 100)
 		// If any messages matches the category, then the whole thread does.
 		msgsByThread := api.MessagesByThread(msgs)
 		prnt.Hum.Always.P("Categorising threads ")
-		progP := prnt.NewProgressPrinter(len(msgsByThread))
-		for _, threadMsgs := range msgsByThread {
-			progP.Progress(1)
-			threadMatched := false
-			for _, msg := range threadMsgs {
-				msg, err := h.Msgs.GetMessage(msg.Id, detail)
-				if err != nil {
-					return nil, err
-				}
-				if h.MsgMatchesCategory(cat, msg) {
-					threadMatched = true
-					break
-				}
-			}
-
-			if threadMatched {
-				for _, msgId := range threadMsgs {
-					msg, err := h.Msgs.GetMessage(msgId.Id, detail)
+		for _, threadMsgIds := range msgsByThread {
+			go func(threadMsgs []*api.MessageId) {
+				threadMatched := false
+				for _, msg := range threadMsgs {
+					msg, err := h.Msgs.GetMessage(msg.Id, detail)
 					if err != nil {
-						return nil, err
+						errChan <- err
+						return
 					}
+					if h.MsgMatchesCategory(cat, msg) {
+						threadMatched = true
+						break
+					}
+				}
+
+				loadedThreadMsgs := make([]*gm.Message, 0, len(threadMsgs))
+				if threadMatched {
+					for _, msgId := range threadMsgs {
+						msg, err := h.Msgs.GetMessage(msgId.Id, detail)
+						if err != nil {
+							errChan <- err
+							return
+						}
+						loadedThreadMsgs = append(loadedThreadMsgs, msg)
+					}
+				}
+				msgChan <- loadedThreadMsgs
+			}(threadMsgIds)
+		}
+
+		errors := make([]error, 0)
+		progP := prnt.NewProgressPrinter(len(msgsByThread))
+		for i := 0; i < len(msgsByThread); i++ {
+			progP.Progress(1)
+			select {
+			case loadedMsgs := <-msgChan:
+				for _, msg := range loadedMsgs {
 					matchedMsgs = append(matchedMsgs, msg)
 				}
+			case err := <-errChan:
+				errors = append(errors, err)
 			}
 		}
+		if len(errors) > 0 {
+			return nil, errors[0]
+		}
 	} else {
+		// TODO goroutine this
 		prnt.Hum.Always.P("Categorising messages ")
 		progP := prnt.NewProgressPrinter(len(msgs))
 		for _, msg := range msgs {
@@ -266,6 +293,9 @@ func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
 }
 
 func (h *GmailHelper) GetPlugins() []*plugin.Plugin {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	if h.plugins == nil {
 		h.plugins = plugin.LoadPlugins()
 	}

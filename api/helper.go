@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -94,6 +95,7 @@ type MsgHelper struct {
 	cache *Cache
 	// These are not cached, because they can change between queries
 	loadedThreads map[string]*gm.Thread
+	mutex         sync.Mutex
 }
 
 func NewMsgHelper(user string, srv *gm.Service) *MsgHelper {
@@ -192,21 +194,38 @@ func (h *MsgHelper) ThreadLabelNames(threadId string) ([]string, error) {
 func (h *MsgHelper) fetchMessages(msgs []*gm.Message, detail MessageDetailLevel) (
 	[]*gm.Message, error) {
 
-	var detailedMsgs []*gm.Message
-
 	prnt.Hum.Always.P("Loading message details ")
-	progP := prnt.NewProgressPrinter(len(msgs))
-	for _, msg := range msgs {
-		progP.Progress(1)
 
-		dMsg, err := h.GetMessage(msg.Id, detail)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to get message: %v", err)
+	msgChan := make(chan *gm.Message)
+	errChan := make(chan error)
+	for _, m_ := range msgs {
+		go func(msg *gm.Message) {
+			dMsg, err := h.GetMessage(msg.Id, detail)
+			if err != nil {
+				errChan <- fmt.Errorf("Failed to get message: %v", err)
+			} else {
+				msgChan <- dMsg
+			}
+		}(m_)
+	}
+
+	detailedMsgs := make([]*gm.Message, 0, len(msgs))
+	errors := make([]error, 0)
+	progP := prnt.NewProgressPrinter(len(msgs))
+	for i := 0; i < len(msgs); i++ {
+		progP.Progress(1)
+		select {
+		case msg := <-msgChan:
+			detailedMsgs = append(detailedMsgs, msg)
+		case err := <-errChan:
+			errors = append(errors, err)
 		}
-		detailedMsgs = append(detailedMsgs, dMsg)
 	}
 	prnt.Hum.Always.P("\n")
 
+	if len(errors) > 0 {
+		return nil, errors[0]
+	}
 	return detailedMsgs, nil
 }
 
@@ -278,14 +297,20 @@ func (h *MsgHelper) loadMessage(id string, detail MessageDetailLevel,
 }
 
 func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
-	if preloadedThread, ok := h.loadedThreads[id]; ok {
+	h.mutex.Lock()
+	preloadedThread, ok := h.loadedThreads[id]
+	h.mutex.Unlock()
+	if ok {
 		return preloadedThread, nil
 	}
+
 	// Note that this will never load the full message texts.
 	thread, err := h.srv.Users.Threads.Get(h.User, id).Do()
 	if err != nil {
 		return nil, err
 	}
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	h.loadedThreads[thread.Id] = thread
 	return thread, nil
 }
