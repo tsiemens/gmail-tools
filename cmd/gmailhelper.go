@@ -104,21 +104,21 @@ func (h *GmailHelper) PrintMessagesJson(msgs []*gm.Message) {
 func (h *GmailHelper) PrintMessage(m *gm.Message) {
 	var subject string
 	var from string
-	if m.Payload != nil && m.Payload.Headers != nil {
-		for _, hdr := range m.Payload.Headers {
-			if hdr.Name == "Subject" {
-				subject = hdr.Value
-			}
-			if hdr.Name == "From" {
-				from = api.GetFromName(hdr.Value)
-			}
-		}
+	headers, err := api.GetMsgHeaders(m)
+	if err != nil {
+		headers = &api.Headers{}
 	}
-	if subject == "" {
+	if headers.Subject == "" {
 		subject = "<No subject>"
+	} else {
+		subject = headers.Subject
 	}
-	if from == "" {
+	if headers.From.Name == "" && headers.From.Address == "" {
 		from = "<unknown sender>"
+	} else if headers.From.Name != "" {
+		from = headers.From.Name
+	} else {
+		from = headers.From.Address
 	}
 
 	labelNames := h.Msgs.MessageLabelNames(m)

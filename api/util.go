@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -16,14 +17,63 @@ type MessageId struct {
 	Id string
 }
 
-var fromFieldRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<.*>\s*`)
+type EmailAddress struct {
+	Address string
+	Name    string
+}
 
-func GetFromName(fromHeaderVal string) string {
-	matches := fromFieldRegexp.FindStringSubmatch(fromHeaderVal)
-	if len(matches) > 0 {
-		return matches[1]
+type Headers struct {
+	Subject string
+	From    EmailAddress
+	To      []EmailAddress
+	Cc      []EmailAddress
+}
+
+var namedEmailRegexp = regexp.MustCompile(`\s*(\S|\S.*\S)\s*<(.*)>\s*`)
+var unnamedEmailRegexp = regexp.MustCompile(`^\s*(\S*)\s*$`)
+
+func GetEmailsInField(fromHeaderVal string) []EmailAddress {
+	emails := make([]EmailAddress, 0)
+	emailStrs := strings.Split(fromHeaderVal, ",")
+	for _, emailStr := range emailStrs {
+		matches := namedEmailRegexp.FindStringSubmatch(emailStr)
+		if len(matches) > 1 {
+			emails = append(emails, EmailAddress{
+				Address: matches[2],
+				Name:    matches[1]})
+		} else {
+			// Try unnamed
+			matches = unnamedEmailRegexp.FindStringSubmatch(emailStr)
+			if len(matches) > 0 {
+				emails = append(emails, EmailAddress{
+					Address: matches[1],
+					Name:    ""})
+			}
+		}
 	}
-	return fromHeaderVal
+	return emails
+}
+
+func GetMsgHeaders(msg *gm.Message) (*Headers, error) {
+	if msg.Payload != nil && msg.Payload.Headers != nil {
+		headers := &Headers{}
+		for _, hdr := range msg.Payload.Headers {
+			if hdr.Name == "Subject" {
+				headers.Subject = hdr.Value
+			} else if hdr.Name == "From" {
+				emails := GetEmailsInField(hdr.Value)
+				if len(emails) > 0 {
+					headers.From = emails[0]
+				}
+			} else if hdr.Name == "To" {
+				headers.To = GetEmailsInField(hdr.Value)
+			} else if hdr.Name == "Cc" {
+				headers.Cc = GetEmailsInField(hdr.Value)
+			}
+		}
+		return headers, nil
+	}
+	return nil, fmt.Errorf("No headers found")
 }
 
 func decodePartBody(part *gm.MessagePart) string {
