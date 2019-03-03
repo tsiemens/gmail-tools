@@ -16,17 +16,39 @@ const (
 	pluginDir = "plugins"
 )
 
-// Common categories
+type InterestLevel int
+
+// When combining different plugins' interest categorization, we will use these
+// rules (with order preference):
+// 1. any( strongly interesting ) -> stronly interesting
+// 2. not 1. and any( stronly uninteresting ) -> stronly uninteresting
+// 3. not the above and any( weakly interesting ) -> weakly intereting
+// 4. Not the above and any( weakly uninteresting ) -> weakly uninteresting
+// 5. all no opinion -> no opinion
 const (
-	CategoryInteresting   = "interesting"
-	CategoryUninteresting = "uninteresting"
+	// Used for specific message patterns which determine interest.
+	StronglyInteresting InterestLevel = iota
+	// Used for specific message patterns which determine disinterest.
+	StronglyUninteresting
+	// Interest determined via a heuristic
+	WeaklyInteresting
+	// Disinterest determined via a heuristic
+	WeaklyUninteresting
+	UnknownInterest
 )
+
+func (i1 InterestLevel) Combine(i2 InterestLevel) InterestLevel {
+	if int(i1) < int(i2) {
+		return i1
+	}
+	return i2
+}
 
 type Plugin struct {
 	Name string
 
-	MatchesCategory           func(string, *gm.Message, *api.MsgHelper) bool
-	DetailRequiredForCategory func(string) api.MessageDetailLevel
+	MessageInterest           func(*gm.Message, *api.MsgHelper) InterestLevel
+	DetailRequiredForInterest func() api.MessageDetailLevel
 }
 
 type PluginBuilder func() *Plugin

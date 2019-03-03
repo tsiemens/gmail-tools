@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -122,28 +121,59 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 	}
 
 	labelNames := h.Msgs.MessageLabelNames(m)
-	// Filter out some labels here
-	var labelsToShow []string
-	for _, l := range labelNames {
-		if !util.DebugMode &&
-			(strings.HasPrefix(l, "CATEGORY_") ||
-				l == "INBOX") {
-			continue
-		}
-		preColor := ""
-		if color, ok := h.conf.LabelColors[l]; ok {
-			colorCode, ok := util.Colors[color]
-			if ok {
-				preColor = colorCode + util.Bold
-			} else {
-				fmt.Printf("'%s' is not a valid color\n", color)
-				os.Exit(1)
+	otherThreadLabels := []string{}
+
+	threadId := m.ThreadId
+	if h.Msgs.ThreadIsLoaded(threadId) {
+		threadLabels, err := h.Msgs.ThreadLabelNames(threadId)
+		if err != nil {
+			otherThreadLabels = append(otherThreadLabels, "<ERROR LOADING THREAD LABELS>")
+		} else {
+			for _, l := range threadLabels {
+				if !util.StringSliceContains(l, labelNames) {
+					otherThreadLabels = append(otherThreadLabels, l)
+				}
 			}
 		}
-		labelsToShow = append(labelsToShow, preColor+l+util.ResetC)
 	}
 
-	fmt.Printf("- %s [%s] %s\n", from, strings.Join(labelsToShow, ", "), subject)
+	// Filter out some labels here
+	var labelsToShow []string
+	addLabelsToShow := func(labels []string, addThreadMarker bool) {
+		for _, l := range labels {
+			if !util.DebugMode &&
+				(strings.HasPrefix(l, "CATEGORY_") ||
+					l == "INBOX") {
+				continue
+			}
+
+			preColor := ""
+			if color, ok := h.conf.LabelColors[l]; ok {
+				colorCode, ok := util.Colors[color]
+				if ok {
+					preColor = colorCode + util.Bold
+				} else {
+					prnt.StderrLog.Fatalf("'%s' is not a valid color\n", color)
+				}
+			}
+
+			if addThreadMarker {
+				l = "(+ " + l + ")"
+			}
+
+			labelsToShow = append(labelsToShow, preColor+l+util.ResetC)
+		}
+	}
+
+	addLabelsToShow(labelNames, false)
+	addLabelsToShow(otherThreadLabels, true)
+
+	maybeId := ""
+	if util.DebugMode {
+		maybeId = m.Id + " "
+	}
+
+	fmt.Printf("%s- %s [%s] %s\n", maybeId, from, strings.Join(labelsToShow, ", "), subject)
 }
 
 func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
@@ -195,11 +225,12 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 
 }
 
-func (h *GmailHelper) FilterMessagesByCategory(
-	cat string, msgs []*gm.Message, categorizeThreads bool,
+func (h *GmailHelper) FilterMessages(
+	msgs []*gm.Message, categorizeThreads bool,
+	detail api.MessageDetailLevel,
+	filter func(*gm.Message, *GmailHelper) bool,
 ) ([]*gm.Message, error) {
 	matchedMsgs := make([]*gm.Message, 0)
-	detail := h.RequiredDetailForPlugins(cat)
 
 	if categorizeThreads {
 		msgChan := make(chan []*gm.Message, 100)
@@ -216,7 +247,7 @@ func (h *GmailHelper) FilterMessagesByCategory(
 						errChan <- err
 						return
 					}
-					if h.MsgMatchesCategory(cat, msg) {
+					if filter(msg, h) {
 						threadMatched = true
 						break
 					}
@@ -264,7 +295,7 @@ func (h *GmailHelper) FilterMessagesByCategory(
 			if err != nil {
 				return nil, err
 			}
-			if h.MsgMatchesCategory(cat, msg) {
+			if filter(msg, h) {
 				matchedMsgs = append(matchedMsgs, msg)
 			}
 		}
@@ -275,17 +306,16 @@ func (h *GmailHelper) FilterMessagesByCategory(
 }
 
 func (h *GmailHelper) FilterMessagesByInterest(
-	interest InterestLevel, msgs []*gm.Message) ([]*gm.Message, error) {
+	interest InterestCategory, msgs []*gm.Message) ([]*gm.Message, error) {
 
-	switch interest {
-	case Interesting:
-		return h.FilterMessagesByCategory(plugin.CategoryInteresting, msgs, true)
-	case Uninteresting:
-		return h.FilterMessagesByCategory(plugin.CategoryUninteresting, msgs, true)
-	case MaybeInteresting:
+	detail := h.RequiredDetailForPluginInterest()
+
+	filter := func(msg *gm.Message, h *GmailHelper) bool {
+		i := h.MsgInterest(msg)
+		return interest == i
 	}
-	prnt.StderrLog.Fatalln("Cannot filter by MaybeInteresting")
-	return nil, nil
+
+	return h.FilterMessages(msgs, true, detail, filter)
 }
 
 func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
@@ -302,46 +332,37 @@ func (h *GmailHelper) GetPlugins() []*plugin.Plugin {
 	return h.plugins
 }
 
-func (h *GmailHelper) MsgMatchesCategory(cat string, m *gm.Message) bool {
+func (h *GmailHelper) MsgPlugInterest(m *gm.Message) plugin.InterestLevel {
+	interest := plugin.UnknownInterest
 	for _, plug := range h.GetPlugins() {
-		if plug.MatchesCategory(cat, m, h.Msgs) {
-			return true
-		}
+		interest = interest.Combine(plug.MessageInterest(m, h.Msgs))
 	}
-	return false
+	return interest
 }
 
-type InterestLevel int
+type InterestCategory int
 
 const (
-	Uninteresting InterestLevel = iota
+	Uninteresting InterestCategory = iota
 	MaybeInteresting
 	Interesting
 )
 
-func (h *GmailHelper) RequiredDetailForPlugins(cat string) api.MessageDetailLevel {
+func (h *GmailHelper) RequiredDetailForPluginInterest() api.MessageDetailLevel {
 	detail := api.LabelsOnly
 	for _, plug := range h.GetPlugins() {
 		detail = api.MoreDetailedLevel(
 			detail,
-			plug.DetailRequiredForCategory(cat))
+			plug.DetailRequiredForInterest())
 	}
 	return detail
 }
 
-func (h *GmailHelper) MsgInterestRequiredDetail() api.MessageDetailLevel {
-	detail := h.RequiredDetailForPlugins(plugin.CategoryInteresting)
-	detail = api.MoreDetailedLevel(
-		detail,
-		h.RequiredDetailForPlugins(plugin.CategoryUninteresting),
-	)
-	return detail
-}
-
-func (h *GmailHelper) MsgInterest(m *gm.Message) InterestLevel {
-	if h.MsgMatchesCategory(plugin.CategoryInteresting, m) {
+func (h *GmailHelper) MsgInterest(m *gm.Message) InterestCategory {
+	i := h.MsgPlugInterest(m)
+	if i == plugin.StronglyInteresting || i == plugin.WeaklyInteresting {
 		return Interesting
-	} else if h.MsgMatchesCategory(plugin.CategoryUninteresting, m) {
+	} else if i == plugin.StronglyUninteresting || i == plugin.WeaklyUninteresting {
 		return Uninteresting
 	}
 	return MaybeInteresting

@@ -40,6 +40,15 @@ func init() {
 	}
 }
 
+func StringSliceContains(str string, sl []string) bool {
+	for _, s := range sl {
+		if str == s {
+			return true
+		}
+	}
+	return false
+}
+
 func ConfirmFromInput(msg string, defaultYes bool) bool {
 	defaultStr := "[y/N]"
 	if defaultYes {

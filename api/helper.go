@@ -296,6 +296,11 @@ func (h *MsgHelper) loadMessage(id string, detail MessageDetailLevel,
 	return msg, err
 }
 
+func (h *MsgHelper) ThreadIsLoaded(id string) bool {
+	_, ok := h.loadedThreads[id]
+	return ok
+}
+
 func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
 	h.mutex.Lock()
 	preloadedThread, ok := h.loadedThreads[id]

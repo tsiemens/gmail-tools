@@ -54,10 +54,10 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 
 	hasLoadedMsgDetails := false
 
-	requiredDetail := gHelper.MsgInterestRequiredDetail()
+	requiredDetail := gHelper.RequiredDetailForPluginInterest()
 
 	if searchInteresting || searchUninteresting {
-		var interest InterestLevel
+		var interest InterestCategory
 		if searchInteresting {
 			interest = Interesting
 		} else {

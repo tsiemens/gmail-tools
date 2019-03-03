@@ -32,7 +32,7 @@ func NewArchiver(srv *gm.Service, conf *config.Config, helper *GmailHelper) *Arc
 }
 
 func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
-	detail := a.helper.MsgInterestRequiredDetail()
+	detail := a.helper.RequiredDetailForPluginInterest()
 	var maxMsgs int64 = -1
 	msgs, err := a.helper.Msgs.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
 		true, !archiveRead, maxMsgs, detail)

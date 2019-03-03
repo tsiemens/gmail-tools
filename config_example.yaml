@@ -1,6 +1,8 @@
 # This should go in ~/.gmailcli/config.yaml
 InterestingMessageQuery: (myname OR to:me@gmail.com)
 
+AlwaysUninterestingLabelPatterns:
+
 UninterestingLabelPatterns:
    - UnimportantLabel1
    - UnimportantLabel2

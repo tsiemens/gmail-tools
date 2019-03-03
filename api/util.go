@@ -10,6 +10,17 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 )
 
+var SpecialLabelNames = []string{
+	"UNREAD",
+	"CATEGORY_PERSONAL",
+	"CATEGORY_SOCIAL",
+	"CATEGORY_PROMOTIONS",
+	"CATEGORY_UPDATES",
+	"CATEGORY_FORUMS",
+	"IMPORTANT",
+	"INBOX",
+}
+
 // A wrapper for a message Id that can be passed by reference.
 // This helps save a little space, and reduces confusion about what contents
 // a message contains when returned from certain functions.

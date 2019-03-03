@@ -17,16 +17,18 @@ const (
 )
 
 type Config struct {
-	InterestingMessageQuery    string            `yaml:"InterestingMessageQuery"`
-	UninterestingLabelPatterns []string          `yaml:"UninterestingLabelPatterns"`
-	InterestingLabelPatterns   []string          `yaml:"InterestingLabelPatterns"`
-	ApplyLabelToUninteresting  string            `yaml:"ApplyLabelToUninteresting"`
-	ApplyLabelOnTouch          string            `yaml:"ApplyLabelOnTouch"`
-	LabelColors                map[string]string `yaml:"LabelColors"`
+	InterestingMessageQuery          string            `yaml:"InterestingMessageQuery"`
+	AlwaysUninterestingLabelPatterns []string          `yaml:"AlwaysUninterestingLabelPatterns"`
+	UninterestingLabelPatterns       []string          `yaml:"UninterestingLabelPatterns"`
+	InterestingLabelPatterns         []string          `yaml:"InterestingLabelPatterns"`
+	ApplyLabelToUninteresting        string            `yaml:"ApplyLabelToUninteresting"`
+	ApplyLabelOnTouch                string            `yaml:"ApplyLabelOnTouch"`
+	LabelColors                      map[string]string `yaml:"LabelColors"`
 
-	UninterLabelRegexps []*regexp.Regexp
-	InterLabelRegexps   []*regexp.Regexp
-	ConfigFile          string
+	AlwaysUninterLabelRegexps []*regexp.Regexp
+	UninterLabelRegexps       []*regexp.Regexp
+	InterLabelRegexps         []*regexp.Regexp
+	ConfigFile                string
 }
 
 func loadConfig() *Config {
@@ -45,24 +47,28 @@ func loadConfig() *Config {
 	}
 	util.Debugf("config: %+v\n", conf)
 
+	checkLoadErr := func(e error) {
+		if err != nil {
+			log.Fatalf("Failed to load config: \"%s\"", err)
+		}
+	}
+
+	for _, pat := range conf.AlwaysUninterestingLabelPatterns {
+		re, err := regexp.Compile(caseIgnore + pat)
+		checkLoadErr(err)
+		conf.AlwaysUninterLabelRegexps = append(conf.AlwaysUninterLabelRegexps, re)
+	}
+
 	for _, pat := range conf.UninterestingLabelPatterns {
 		re, err := regexp.Compile(caseIgnore + pat)
-		if err != nil {
-			break
-		}
+		checkLoadErr(err)
 		conf.UninterLabelRegexps = append(conf.UninterLabelRegexps, re)
 	}
-	if err == nil {
-		for _, pat := range conf.InterestingLabelPatterns {
-			re, err := regexp.Compile(caseIgnore + pat)
-			if err != nil {
-				break
-			}
-			conf.InterLabelRegexps = append(conf.InterLabelRegexps, re)
-		}
-	}
-	if err != nil {
-		log.Fatalf("Failed to load config: \"%s\"", err)
+
+	for _, pat := range conf.InterestingLabelPatterns {
+		re, err := regexp.Compile(caseIgnore + pat)
+		checkLoadErr(err)
+		conf.InterLabelRegexps = append(conf.InterLabelRegexps, re)
 	}
 	return conf
 }
