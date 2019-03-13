@@ -44,6 +44,14 @@ func (i1 InterestLevel) Combine(i2 InterestLevel) InterestLevel {
 	return i2
 }
 
+// Favours the most uncertain answer
+func (i1 InterestLevel) InverseCombine(i2 InterestLevel) InterestLevel {
+	if int(i1) > int(i2) {
+		return i1
+	}
+	return i2
+}
+
 type Plugin struct {
 	Name string
 

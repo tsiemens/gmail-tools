@@ -2,6 +2,7 @@
 InterestingMessageQuery: (myname OR to:me@gmail.com)
 
 AlwaysUninterestingLabelPatterns:
+   - ManualUninterestingLabel
 
 UninterestingLabelPatterns:
    - UnimportantLabel1
