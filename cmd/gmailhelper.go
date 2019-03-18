@@ -318,6 +318,29 @@ func (h *GmailHelper) FilterMessagesByInterest(
 	return h.FilterMessages(msgs, true, detail, filter)
 }
 
+func (h *GmailHelper) FindOutdatedMessages(baseQuery string) []*gm.Message {
+
+	outdatedMsgsSet := make(map[string]bool, 0)
+
+	for _, plug := range h.GetPlugins() {
+		if plug.OutdatedMessages != nil {
+			prnt.Deb.Ln("Getting outdated messages from", plug.Name, "plugin.")
+			pluginOutdated := plug.OutdatedMessages(baseQuery, h.Msgs)
+			for _, m := range pluginOutdated {
+				outdatedMsgsSet[m.Id] = true
+			}
+		}
+	}
+
+	outdatedMsgs := make([]*gm.Message, 0, len(outdatedMsgsSet))
+	for id, _ := range outdatedMsgsSet {
+		msg, err := h.Msgs.GetMessage(id, api.IdsOnly)
+		util.CheckErr(err)
+		outdatedMsgs = append(outdatedMsgs, msg)
+	}
+	return outdatedMsgs
+}
+
 func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
 	return h.Msgs.ApplyLabels(msgs, []string{h.conf.ApplyLabelOnTouch})
 }

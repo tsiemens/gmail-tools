@@ -57,6 +57,8 @@ type Plugin struct {
 
 	MessageInterest           func(*gm.Message, *api.MsgHelper) InterestLevel
 	DetailRequiredForInterest func() api.MessageDetailLevel
+
+	OutdatedMessages func(string, *api.MsgHelper) []*gm.Message
 }
 
 type PluginBuilder func() *Plugin

@@ -17,6 +17,7 @@ const (
 )
 
 var archiveRead = false
+var archiveOutdated = false
 
 type Archiver struct {
 	srv    *gm.Service
@@ -31,16 +32,32 @@ func NewArchiver(srv *gm.Service, conf *config.Config, helper *GmailHelper) *Arc
 	return &Archiver{srv: srv, conf: conf, helper: helper}
 }
 
-func (a *Archiver) LoadMsgsToArchive() []*gm.Message {
+func (a *Archiver) LoadMsgsToArchive(query string) []*gm.Message {
+	if query == "" {
+		query = " -(" + a.conf.InterestingMessageQuery + ")"
+	}
+
 	detail := a.helper.RequiredDetailForPluginInterest()
 	var maxMsgs int64 = -1
-	msgs, err := a.helper.Msgs.QueryMessages(" -("+a.conf.InterestingMessageQuery+")",
+	msgs, err := a.helper.Msgs.QueryMessages(query,
 		true, !archiveRead, maxMsgs, detail)
 	util.CheckErr(err)
 
 	msgsToArchive, err := a.helper.FilterMessagesByInterest(Uninteresting, msgs)
 	util.CheckErr(err)
 	return msgsToArchive
+}
+
+func (a *Archiver) LoadOutdatedMsgsToArchive(query string) []*gm.Message {
+	if query == "" {
+		query = "-(category:primary)"
+	}
+
+	if !archiveRead {
+		query += " label:unread"
+	}
+
+	return a.helper.FindOutdatedMessages(query)
 }
 
 func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
@@ -61,6 +78,11 @@ func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
 }
 
 func runArchiveCmd(cmd *cobra.Command, args []string) {
+	query := ""
+	if len(args) > 0 {
+		query += args[0] + " "
+	}
+
 	conf := config.AppConfig()
 
 	srv := api.NewGmailClient(api.ModifyScope)
@@ -69,7 +91,12 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
 	arch := NewArchiver(srv, conf, gHelper)
-	msgsToArchive := arch.LoadMsgsToArchive()
+	var msgsToArchive []*gm.Message
+	if archiveOutdated {
+		msgsToArchive = arch.LoadOutdatedMsgsToArchive(query)
+	} else {
+		msgsToArchive = arch.LoadMsgsToArchive(query)
+	}
 	prnt.HPrint(prnt.Always, "done\n")
 
 	if len(msgsToArchive) > 0 {
@@ -103,11 +130,13 @@ func runArchiveCmd(cmd *cobra.Command, args []string) {
 
 // archiveCmd represents the archive command
 var archiveCmd = &cobra.Command{
-	Use: "archive",
+	Use: "archive [BASE_QUERY]",
 	Short: "Attempts to archive unread messages in the inbox, based on the rules " +
-		"in ~/.gmailcli/config.yaml",
+		"in ~/.gmailcli/config.yaml. Optionally, the base query can be provided " +
+		"to override the default.",
 	Aliases: []string{"arch"},
 	Run:     runArchiveCmd,
+	Args:    cobra.RangeArgs(0, 1),
 }
 
 func init() {
@@ -116,4 +145,6 @@ func init() {
 	addDryFlag(archiveCmd)
 	archiveCmd.Flags().BoolVarP(&archiveRead, "include-read", "r", false,
 		"Archive read and unread inbox messages")
+	archiveCmd.Flags().BoolVarP(&archiveOutdated, "outdated", "o", false,
+		"Find and archive outdated messages only (duplicates, obsolete, etc.)")
 }
