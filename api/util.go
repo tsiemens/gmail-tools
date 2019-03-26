@@ -112,13 +112,25 @@ func MessageHasBody(msg *gm.Message) bool {
 	return msg.Payload != nil && msg.Payload.Body != nil
 }
 
-func MessagesByThread(msgs []*gm.Message) map[string][]*MessageId {
+func MessageIdsByThread(msgs []*gm.Message) map[string][]*MessageId {
 	threads := make(map[string][]*MessageId)
 	for _, msg := range msgs {
 		if tMsgs, ok := threads[msg.ThreadId]; ok {
 			threads[msg.ThreadId] = append(tMsgs, &MessageId{msg.Id})
 		} else {
 			threads[msg.ThreadId] = []*MessageId{&MessageId{msg.Id}}
+		}
+	}
+	return threads
+}
+
+func MessagesByThread(msgs []*gm.Message) map[string][]*gm.Message {
+	threads := make(map[string][]*gm.Message)
+	for _, msg := range msgs {
+		if tMsgs, ok := threads[msg.ThreadId]; ok {
+			threads[msg.ThreadId] = append(tMsgs, msg)
+		} else {
+			threads[msg.ThreadId] = []*gm.Message{msg}
 		}
 	}
 	return threads

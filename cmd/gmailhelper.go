@@ -236,7 +236,7 @@ func (h *GmailHelper) FilterMessages(
 		msgChan := make(chan []*gm.Message, 100)
 		errChan := make(chan error, 100)
 		// If any messages matches the category, then the whole thread does.
-		msgsByThread := api.MessagesByThread(msgs)
+		msgsByThread := api.MessageIdsByThread(msgs)
 		prnt.Hum.Always.P("Categorising threads ")
 		for _, threadMsgIds := range msgsByThread {
 			go func(threadMsgs []*api.MessageId) {
