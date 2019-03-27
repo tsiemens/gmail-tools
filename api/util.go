@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
@@ -110,6 +111,20 @@ func GetMessageBody(msg *gm.Message) []string {
 
 func MessageHasBody(msg *gm.Message) bool {
 	return msg.Payload != nil && msg.Payload.Body != nil
+}
+
+func MessagesLatestFirst(msgs []*gm.Message) []*gm.Message {
+	sorted := make([]*gm.Message, len(msgs))
+	copy(sorted, msgs)
+
+	// func Slice(slice interface{}, less func(i, j int) bool)
+	msgLess := func(i, j int) bool {
+		// Backwards, since we want the higher dates first.
+		return sorted[i].InternalDate > sorted[j].InternalDate
+	}
+
+	sort.Slice(sorted, msgLess)
+	return sorted
 }
 
 func MessageIdsByThread(msgs []*gm.Message) map[string][]*MessageId {
