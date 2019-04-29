@@ -92,23 +92,25 @@ type MsgHelper struct {
 	srv    *gm.Service
 	labels map[string]string // Label ID to label name
 
-	cache *Cache
+	useCacheFile bool
+	cache        *Cache
 	// These are not cached, because they can change between queries
 	loadedThreads map[string]*gm.Thread
 	mutex         sync.Mutex
 }
 
-func NewMsgHelper(user string, srv *gm.Service) *MsgHelper {
+func NewMsgHelper(user string, srv *gm.Service, useCacheFile bool) *MsgHelper {
 	return &MsgHelper{
 		User:          user,
 		srv:           srv,
+		useCacheFile:  useCacheFile,
 		loadedThreads: make(map[string]*gm.Thread),
 	}
 }
 
 func (h *MsgHelper) getCache() *Cache {
 	if h.cache == nil {
-		h.cache = NewCache()
+		h.cache = NewCache(h.useCacheFile)
 		h.cache.LoadMsgs()
 	}
 	return h.cache

@@ -22,14 +22,18 @@ type Cache struct {
 	// Maps of messages by ID
 	storedMsgs map[string]*gm.Message
 	newMsgs    map[string]*gm.Message
+	useFile    bool
 	closed     bool
 
 	mutex sync.RWMutex
 }
 
-func NewCache() *Cache {
-	cache := &Cache{storedMsgs: make(map[string]*gm.Message),
-		newMsgs: make(map[string]*gm.Message)}
+func NewCache(useFile bool) *Cache {
+	cache := &Cache{
+		storedMsgs: make(map[string]*gm.Message),
+		newMsgs:    make(map[string]*gm.Message),
+		useFile:    useFile,
+	}
 	gob.Register(gm.Message{})
 	gob.Register(cache.storedMsgs)
 
@@ -65,6 +69,9 @@ func (c *Cache) Msg(id string) (*gm.Message, bool) {
 }
 
 func (c *Cache) LoadMsgs() {
+	if !c.useFile {
+		return
+	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -86,6 +93,10 @@ func (c *Cache) LoadMsgs() {
 }
 
 func (c *Cache) writeStoredMsgs() {
+	if !c.useFile {
+		prnt.Deb.Ln("Cache::writeStoreMsgs: Skipping write to file")
+		return
+	}
 	fname := c.msgCacheName()
 	f, err := os.Create(fname)
 	util.CheckErrf(err, "Error creating %s:", fname)

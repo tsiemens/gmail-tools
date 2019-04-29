@@ -34,7 +34,7 @@ type GmailHelper struct {
 func NewGmailHelper(srv *gm.Service, user string, conf *config.Config) *GmailHelper {
 
 	accountHelper := api.NewAccountHelper(user, srv)
-	msgHelper := api.NewMsgHelper(user, srv)
+	msgHelper := api.NewMsgHelper(user, srv, UseCacheFile)
 	helper := &GmailHelper{
 		User: user, Account: accountHelper, Msgs: msgHelper,
 		srv: srv, conf: conf}

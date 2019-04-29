@@ -18,6 +18,7 @@ var Quiet = false
 var BatchMode = false
 var EmailToAssert string
 var ClearCache = false
+var UseCacheFile = false
 
 func MaybeConfirmFromInput(msg string, defaultVal bool) bool {
 	if AssumeYes {
@@ -90,6 +91,9 @@ func init() {
 
 	RootCmd.PersistentFlags().BoolVar(&ClearCache, "clear-cache", false,
 		"Delete the cache files before running the command")
+
+	RootCmd.PersistentFlags().BoolVar(&UseCacheFile, "enable-cache", false,
+		"Enables the data cache to be read and saved from/to disk")
 }
 
 // onInit reads in config file and ENV variables if set, and performs global
@@ -107,7 +111,7 @@ func onInit() {
 	}
 
 	if ClearCache {
-		cache := api.NewCache()
+		cache := api.NewCache(true)
 		defer cache.Close()
 		cache.Clear()
 	}
