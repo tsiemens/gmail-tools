@@ -198,10 +198,16 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, detail MessageDetailLevel)
 
 	prnt.Hum.Always.P("Loading message details ")
 
+	concurrentQueries := 100
+	querySem := make(chan bool, concurrentQueries)
 	msgChan := make(chan *gm.Message)
 	errChan := make(chan error)
+
 	for _, m_ := range msgs {
 		go func(msg *gm.Message) {
+			querySem <- true
+			defer func() { <-querySem }()
+
 			dMsg, err := h.GetMessage(msg.Id, detail)
 			if err != nil {
 				errChan <- fmt.Errorf("Failed to get message: %v", err)

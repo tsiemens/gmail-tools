@@ -233,6 +233,9 @@ func (h *GmailHelper) FilterMessages(
 	matchedMsgs := make([]*gm.Message, 0)
 
 	if categorizeThreads {
+		concurrentQueries := 100
+		querySem := make(chan bool, concurrentQueries)
+
 		msgChan := make(chan []*gm.Message, 100)
 		errChan := make(chan error, 100)
 		// If any messages matches the category, then the whole thread does.
@@ -240,6 +243,9 @@ func (h *GmailHelper) FilterMessages(
 		prnt.Hum.Always.P("Categorising threads ")
 		for _, threadMsgIds := range msgsByThread {
 			go func(threadMsgs []*api.MessageId) {
+				querySem <- true
+				defer func() { <-querySem }()
+
 				threadMatched := false
 				for _, msg := range threadMsgs {
 					msg, err := h.Msgs.GetMessage(msg.Id, detail)
