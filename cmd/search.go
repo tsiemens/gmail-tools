@@ -1,7 +1,9 @@
 package cmd
 
 import (
-	// gm "google.golang.org/api/gmail/v1"
+	"sort"
+
+	gm "google.golang.org/api/gmail/v1"
 
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
@@ -19,6 +21,129 @@ var searchUninteresting = false
 var searchPrintIdsOnly = false
 var searchPrintJson = false
 var searchMaxMsgs int64
+var searchShowSummary = false
+
+func showSummary(msgs []*gm.Message, gHelper *GmailHelper) {
+	prnt.Hum.Always.Ln("\nMESSAGE SUMMARY\n")
+
+	type stringCountTup struct {
+		Name  string
+		Count int
+	}
+
+	sortedTupList := func(countMap map[string]int) []stringCountTup {
+		stringsSorted := make([]stringCountTup, 0, len(countMap))
+		for name, count := range countMap {
+			stringsSorted = append(stringsSorted, stringCountTup{name, count})
+		}
+		sort.Slice(
+			stringsSorted,
+			func(i, j int) bool { return stringsSorted[i].Count > stringsSorted[j].Count })
+
+		return stringsSorted
+	}
+
+	// Show message count per label
+	labelCounts := make(map[string]int)
+	for _, msg := range msgs {
+		labels := gHelper.Msgs.MessageLabelNames(msg)
+		for _, label := range labels {
+			var count int
+			var ok bool
+			if count, ok = labelCounts[label]; !ok {
+				count = 0
+			}
+			count++
+			labelCounts[label] = count
+		}
+	}
+
+	labelsSorted := sortedTupList(labelCounts)
+
+	prnt.Hum.Always.Ln("Messages per label:\n-------------------------------")
+
+	for _, tup := range labelsSorted {
+		prnt.Hum.Always.F("%-20s %d\n", tup.Name, tup.Count)
+	}
+
+	// Show statistics from the message headers like sender and recipient counts
+	senderCounts := make(map[string]int)
+	recipientCounts := make(map[string]int)
+	for _, msg := range msgs {
+		headers, err := api.GetMsgHeaders(msg)
+		if err != nil {
+			prnt.Hum.Always.Ln("Error retreiving message header:", err)
+			continue
+		}
+
+		var count int
+		var ok bool
+		if count, ok = senderCounts[headers.From.Address]; !ok {
+			count = 0
+		}
+		count++
+		senderCounts[headers.From.Address] = count
+
+		for _, email := range headers.To {
+			if count, ok = recipientCounts[email.Address]; !ok {
+				count = 0
+			}
+			count++
+			recipientCounts[email.Address] = count
+		}
+		for _, email := range headers.Cc {
+			if count, ok = recipientCounts[email.Address]; !ok {
+				count = 0
+			}
+			count++
+			recipientCounts[email.Address] = count
+		}
+	}
+
+	printCountsWithThresholdOfMax := func(header string, skippedFmt string, countMap map[string]int) {
+		sortedTups := sortedTupList(countMap)
+
+		prnt.Hum.Always.Ln(header)
+
+		countThreshold := 0
+		if len(sortedTups) > 0 {
+			largestFewCnt := util.IntMin(len(sortedTups), 3)
+			largestFewTotal := 0
+			for i := 0; i < largestFewCnt; i++ {
+				largestFewTotal += sortedTups[i].Count
+			}
+			largestFewAvg := largestFewTotal / largestFewCnt
+
+			// Arbitrary. Chose to limit to 20% of biggest few
+			countThreshold = int(float32(largestFewAvg) * 0.20)
+		}
+		minEntrys := 10
+		skippedCnt := 0
+		for i, tup := range sortedTups {
+			if i < minEntrys ||
+				tup.Count >= countThreshold {
+				prnt.Hum.Always.F("%-40s %d\n", tup.Name, tup.Count)
+			} else {
+				skippedCnt++
+			}
+		}
+		if skippedCnt > 0 {
+			prnt.Hum.Always.F(skippedFmt, skippedCnt)
+		}
+	}
+
+	printCountsWithThresholdOfMax(
+		"\nMessages sent by:\n-------------------------------",
+		"(%d additional senders skipped; send counts too low)\n",
+		senderCounts,
+	)
+
+	printCountsWithThresholdOfMax(
+		"\nMessages sent to:\n-------------------------------",
+		"(%d additional recipients skipped; counts too low)\n",
+		recipientCounts,
+	)
+}
 
 func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchInteresting && searchUninteresting {
@@ -75,7 +200,15 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 	prnt.HPrintf(prnt.Always, "Query matched %d messages\n", len(msgs))
 
-	if !Quiet && MaybeConfirmFromInput("Show messages?", true) {
+	if searchShowSummary {
+		if !hasLoadedMsgDetails {
+			msgs, err = gHelper.Msgs.LoadMessages(msgs, requiredDetail)
+			util.CheckErr(err)
+			hasLoadedMsgDetails = true
+		}
+
+		showSummary(msgs, gHelper)
+	} else if !Quiet && MaybeConfirmFromInput("Show messages?", true) {
 		if searchPrintIdsOnly {
 			for _, msg := range msgs {
 				prnt.Printf("%s,%s\n", msg.Id, msg.ThreadId)
@@ -133,6 +266,8 @@ func init() {
 		"Only prints out only messageId,threadId (does not prompt)")
 	searchCmd.Flags().BoolVar(&searchPrintJson, "json", false,
 		"Print message details formatted as json")
+	searchCmd.Flags().BoolVar(&searchShowSummary, "summary", false,
+		"Print a statistical summary of the matched messages")
 	searchCmd.Flags().Int64VarP(&searchMaxMsgs, "max", "m", -1,
 		"Set a max on how many results are queried.")
 	addDryFlag(searchCmd)
