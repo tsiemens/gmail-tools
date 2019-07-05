@@ -22,6 +22,12 @@ var SpecialLabelNames = []string{
 	"INBOX",
 }
 
+// Determined heuristically from testing
+// We should avoid making more than this many rquests in parallel, else
+// the gmail service will yield errors.
+// The API does not publicly say what the limit is at the moment.
+var MaxConcurrentRequests = 80
+
 // A wrapper for a message Id that can be passed by reference.
 // This helps save a little space, and reduces confusion about what contents
 // a message contains when returned from certain functions.

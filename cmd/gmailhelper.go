@@ -233,7 +233,7 @@ func (h *GmailHelper) FilterMessages(
 	matchedMsgs := make([]*gm.Message, 0)
 
 	if categorizeThreads {
-		concurrentQueries := 100
+		concurrentQueries := api.MaxConcurrentRequests
 		querySem := make(chan bool, concurrentQueries)
 
 		msgChan := make(chan []*gm.Message, 100)

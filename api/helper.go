@@ -198,7 +198,7 @@ func (h *MsgHelper) fetchMessages(msgs []*gm.Message, detail MessageDetailLevel)
 
 	prnt.Hum.Always.P("Loading message details ")
 
-	concurrentQueries := 100
+	concurrentQueries := MaxConcurrentRequests
 	querySem := make(chan bool, concurrentQueries)
 	msgChan := make(chan *gm.Message)
 	errChan := make(chan error)
@@ -332,6 +332,9 @@ func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
 func (h *MsgHelper) GetThread(id string, detail MessageDetailLevel,
 ) (*gm.Thread, error) {
 	thread, err := h.getJustThread(id)
+	if err != nil {
+		return nil, err
+	}
 	if detail != IdsOnly {
 		for _, msg := range thread.Messages {
 			// Simply pre-loads the messages into the cache at the desired level.
