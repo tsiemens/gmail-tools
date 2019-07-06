@@ -63,8 +63,8 @@ func tokenCacheFile(scope *ScopeProfile) (string, error) {
 	return util.HomeDirAndFile(CredentialsDirName, scope.CredFile)
 }
 
-func clientSecretFile() (string, error) {
-	return util.HomeDirAndFile(util.UserAppDirName, ClientSecretFileName)
+func clientSecretFile() string {
+	return util.RequiredHomeDirAndFile(util.UserAppDirName, ClientSecretFileName)
 }
 
 // getClient uses a Context and Config to retrieve a Token
@@ -127,10 +127,7 @@ func saveToken(file string, token *oauth2.Token) {
 }
 
 func getClientSecret() ([]byte, error) {
-	secretFname, err := clientSecretFile()
-	if err != nil {
-		log.Fatalf("Unable to get path to cached credential file. %v", err)
-	}
+	secretFname := clientSecretFile()
 	return ioutil.ReadFile(secretFname)
 }
 
@@ -139,7 +136,10 @@ func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 
 	secret, err := getClientSecret()
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		util.ExternFatalf("Unable to read client secret file: %v\n"+
+			"To proceed, add a credentials file named '%s'. See the README for "+
+			"information about getting a client secret file from "+
+			"the Google developer console.\n", err, clientSecretFile())
 	}
 
 	config, err := google.ConfigFromJSON(secret, scope.ScopesString())

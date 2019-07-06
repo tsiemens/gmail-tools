@@ -3,6 +3,7 @@ package config
 import (
 	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 
 	"gopkg.in/yaml.v2"
@@ -33,6 +34,22 @@ type Config struct {
 
 func loadConfig() *Config {
 	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
+
+	var confData []byte
+
+	if _, err := os.Stat(confFname); err != nil {
+		if os.IsNotExist(err) {
+			// File does *not* exist
+			_, err := os.Create(confFname)
+			if err != nil {
+				log.Fatalf("Failed to create config file: %v", err)
+			}
+			confData = make([]byte, 0)
+		} else {
+			// Schrodinger: file may or may not exist. See err for details.
+			log.Fatalf("Failed to stat config file: %v", err)
+		}
+	}
 
 	confData, err := ioutil.ReadFile(confFname)
 	if err != nil {

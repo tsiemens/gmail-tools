@@ -93,7 +93,7 @@ func ConfirmFromInputLong(msg string) bool {
 func HomeBasedDir(dir string) (string, error) {
 	usr, err := user.Current()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to get user: %v", err)
 	}
 	dirPath := filepath.Join(usr.HomeDir, dir)
 	os.MkdirAll(dirPath, 0700)
@@ -111,8 +111,7 @@ func HomeDirAndFile(dir, fname string) (string, error) {
 func RequiredHomeDirAndFile(dir, fname string) string {
 	fname, err := HomeDirAndFile(dir, fname)
 	if err != nil {
-		path := filepath.Join(dir, fname)
-		log.Fatalf("Unable to get %s: %v", path, err)
+		log.Fatal(err)
 	}
 	return fname
 }
@@ -124,6 +123,18 @@ func RequiredHomeBasedDir(dir string) string {
 		log.Fatalf("Unable to get %s/: %v", path, err)
 	}
 	return dirName
+}
+
+// The ExternFatal are to be used when printing potentially expected errors
+// (file/system/api errors) which are essential to proceeding.
+
+func ExternFatalf(format string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, format, v...)
+	os.Exit(1)
+}
+func ExternFatal(v ...interface{}) {
+	fmt.Fprintln(os.Stderr, v...)
+	os.Exit(1)
 }
 
 func CheckErr(err error, v ...interface{}) {
