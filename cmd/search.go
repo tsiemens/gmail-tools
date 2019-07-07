@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"sort"
+	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
 
@@ -9,6 +9,7 @@ import (
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/config"
 	"github.com/tsiemens/gmail-tools/prnt"
+	"github.com/tsiemens/gmail-tools/searchutil"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
@@ -26,49 +27,27 @@ var searchShowSummary = false
 func showSummary(msgs []*gm.Message, gHelper *GmailHelper) {
 	prnt.Hum.Always.Ln("\nMESSAGE SUMMARY\n")
 
-	type stringCountTup struct {
-		Name  string
-		Count int
-	}
-
-	sortedTupList := func(countMap map[string]int) []stringCountTup {
-		stringsSorted := make([]stringCountTup, 0, len(countMap))
-		for name, count := range countMap {
-			stringsSorted = append(stringsSorted, stringCountTup{name, count})
-		}
-		sort.Slice(
-			stringsSorted,
-			func(i, j int) bool { return stringsSorted[i].Count > stringsSorted[j].Count })
-
-		return stringsSorted
-	}
-
 	// Show message count per label
-	labelCounts := make(map[string]int)
+	labelCounts := searchutil.NewCountedStringDefaultMap()
 	for _, msg := range msgs {
 		labels := gHelper.Msgs.MessageLabelNames(msg)
 		for _, label := range labels {
-			var count int
-			var ok bool
-			if count, ok = labelCounts[label]; !ok {
-				count = 0
-			}
-			count++
-			labelCounts[label] = count
+			labelCounts.Inc(label)
 		}
 	}
 
-	labelsSorted := sortedTupList(labelCounts)
+	labelsSorted := searchutil.MapToSortedCountedStrings(labelCounts.Map)
 
-	prnt.Hum.Always.Ln("Messages per label:\n-------------------------------")
+	// prnt.Hum.Always.Ln("Messages per label:\n-------------------------------")
+	prnt.Hum.Always.F("Messages per label:\n%s\n", strings.Repeat("-", 30))
 
 	for _, tup := range labelsSorted {
-		prnt.Hum.Always.F("%-20s %d\n", tup.Name, tup.Count)
+		prnt.Hum.Always.F("%-20s %d\n", tup.Str, tup.Count)
 	}
 
 	// Show statistics from the message headers like sender and recipient counts
-	senderCounts := make(map[string]int)
-	recipientCounts := make(map[string]int)
+	senderCounts := searchutil.NewCountedStringDefaultMap()
+	recipientCounts := searchutil.NewCountedStringDefaultMap()
 	for _, msg := range msgs {
 		headers, err := api.GetMsgHeaders(msg)
 		if err != nil {
@@ -76,73 +55,39 @@ func showSummary(msgs []*gm.Message, gHelper *GmailHelper) {
 			continue
 		}
 
-		var count int
-		var ok bool
-		if count, ok = senderCounts[headers.From.Address]; !ok {
-			count = 0
-		}
-		count++
-		senderCounts[headers.From.Address] = count
+		senderCounts.Inc(headers.From.Address)
 
 		for _, email := range headers.To {
-			if count, ok = recipientCounts[email.Address]; !ok {
-				count = 0
-			}
-			count++
-			recipientCounts[email.Address] = count
+			recipientCounts.Inc(email.Address)
 		}
 		for _, email := range headers.Cc {
-			if count, ok = recipientCounts[email.Address]; !ok {
-				count = 0
-			}
-			count++
-			recipientCounts[email.Address] = count
+			recipientCounts.Inc(email.Address)
 		}
 	}
 
-	printCountsWithThresholdOfMax := func(header string, skippedFmt string, countMap map[string]int) {
-		sortedTups := sortedTupList(countMap)
-
-		prnt.Hum.Always.Ln(header)
-
-		countThreshold := 0
-		if len(sortedTups) > 0 {
-			largestFewCnt := util.IntMin(len(sortedTups), 3)
-			largestFewTotal := 0
-			for i := 0; i < largestFewCnt; i++ {
-				largestFewTotal += sortedTups[i].Count
-			}
-			largestFewAvg := largestFewTotal / largestFewCnt
-
-			// Arbitrary. Chose to limit to 20% of biggest few
-			countThreshold = int(float32(largestFewAvg) * 0.20)
-		}
-		minEntrys := 10
-		skippedCnt := 0
-		for i, tup := range sortedTups {
-			if i < minEntrys ||
-				tup.Count >= countThreshold {
-				prnt.Hum.Always.F("%-40s %d\n", tup.Name, tup.Count)
-			} else {
-				skippedCnt++
-			}
-		}
-		if skippedCnt > 0 {
-			prnt.Hum.Always.F(skippedFmt, skippedCnt)
-		}
-	}
-
-	printCountsWithThresholdOfMax(
+	searchutil.PrintCountsWithThresholdOfMax(
 		"\nMessages sent by:\n-------------------------------",
-		"(%d additional senders skipped; send counts too low)\n",
-		senderCounts,
+		"senders",
+		10, // Show at least 10
+		20, // Show those with at least 20% of counts of top 3
+		senderCounts.Map,
 	)
 
-	printCountsWithThresholdOfMax(
+	searchutil.PrintCountsWithThresholdOfMax(
 		"\nMessages sent to:\n-------------------------------",
-		"(%d additional recipients skipped; counts too low)\n",
-		recipientCounts,
+		"recipients",
+		10, // Show at least 10
+		20, // Show those with at least 20% of counts of top 3
+		recipientCounts.Map,
 	)
+
+	// Show plugin-specific summaries
+	plugins := gHelper.GetPlugins()
+	for _, plug := range plugins {
+		if plug.PrintMessageSummary != nil {
+			plug.PrintMessageSummary(msgs, gHelper.Msgs)
+		}
+	}
 }
 
 func runSearchCmd(cmd *cobra.Command, args []string) {
