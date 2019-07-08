@@ -52,6 +52,11 @@ func (i1 InterestLevel) InverseCombine(i2 InterestLevel) InterestLevel {
 	return i2
 }
 
+type MessageFilter struct {
+	Desc    string
+	Matches func(*gm.Message, *api.MsgHelper) bool
+}
+
 type Plugin struct {
 	Name string
 
@@ -61,6 +66,8 @@ type Plugin struct {
 	OutdatedMessages func(string, *api.MsgHelper) []*gm.Message
 
 	PrintMessageSummary func([]*gm.Message, *api.MsgHelper)
+
+	MessageFilters map[string]*MessageFilter
 }
 
 type PluginBuilder func() *Plugin

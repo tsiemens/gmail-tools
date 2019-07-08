@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/config"
+	"github.com/tsiemens/gmail-tools/plugin"
 	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/searchutil"
 	"github.com/tsiemens/gmail-tools/util"
@@ -19,6 +20,9 @@ var searchTouch = false
 var searchTrash = false
 var searchInteresting = false
 var searchUninteresting = false
+var searchDumpCustomFilters = false
+var searchCustomFilterNames []string
+var searchInverseCustomFilterNames []string
 var searchPrintIdsOnly = false
 var searchPrintJson = false
 var searchMaxMsgs int64
@@ -90,11 +94,107 @@ func showSummary(msgs []*gm.Message, gHelper *GmailHelper) {
 	}
 }
 
+func dumpExtraFilters(gHelper *GmailHelper) {
+	plugins := gHelper.GetPlugins()
+	for _, plug := range plugins {
+		if plug.MessageFilters != nil {
+			prnt.Hum.Always.F("From %s:\n", plug.Name)
+			for name := range plug.MessageFilters {
+				filter := plug.MessageFilters[name]
+				prnt.Hum.Always.F("%-30s %s\n", name, filter.Desc)
+			}
+		}
+	}
+}
+
+func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message {
+	allFilters := make(map[string]*plugin.MessageFilter)
+	plugins := gHelper.GetPlugins()
+	for _, plug := range plugins {
+		if plug.MessageFilters != nil {
+			for name := range plug.MessageFilters {
+				allFilters[name] = plug.MessageFilters[name]
+			}
+		}
+	}
+
+	type filterAndDirection struct {
+		Filter *plugin.MessageFilter
+		Invert bool
+	}
+
+	filtersToApply := make([]filterAndDirection, 0, len(searchCustomFilterNames))
+	for _, name := range searchCustomFilterNames {
+		if filter, ok := allFilters[name]; ok {
+			prnt.Deb.Ln("Will apply filter", name)
+			filtersToApply = append(filtersToApply, filterAndDirection{filter, false})
+		}
+	}
+
+	for _, name := range searchInverseCustomFilterNames {
+		if filter, ok := allFilters[name]; ok {
+			prnt.Deb.Ln("Will inversely apply filter", name)
+			filtersToApply = append(filtersToApply, filterAndDirection{filter, true})
+		}
+	}
+
+	prnt.Hum.Always.P("Running extra filters on messages ")
+	filteredMsgs := make([]*gm.Message, 0)
+
+	querySem := make(chan bool, api.MaxConcurrentRequests)
+	includeMsgChan := make(chan *gm.Message, 100)
+	excludeMsgChan := make(chan *gm.Message, 100)
+
+	for _, msg_ := range msgs {
+		go func(msg *gm.Message) {
+			querySem <- true
+			defer func() { <-querySem }()
+			for _, fAndD := range filtersToApply {
+				if fAndD.Filter.Matches(msg, gHelper.Msgs) == fAndD.Invert {
+					excludeMsgChan <- msg
+					return
+				}
+			}
+			// Matched all filters
+			includeMsgChan <- msg
+		}(msg_)
+	}
+
+	progP := prnt.NewProgressPrinter(len(msgs))
+	for i := 0; i < len(msgs); i++ {
+		progP.Progress(1)
+		select {
+		case msg := <-includeMsgChan:
+			filteredMsgs = append(filteredMsgs, msg)
+		case <-excludeMsgChan:
+		}
+	}
+
+	prnt.Hum.Always.P("\n")
+	return filteredMsgs
+}
+
 func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchInteresting && searchUninteresting {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
 
+	conf := config.AppConfig()
+	if searchTouch && conf.ApplyLabelOnTouch == "" {
+		prnt.StderrLog.Fatalf("No ApplyLabelOnTouch property found in %s\n",
+			conf.ConfigFile)
+	}
+
+	srv := api.NewGmailClient(api.ModifyScope)
+	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
+
+	// Special options, which don't search
+	if searchDumpCustomFilters {
+		dumpExtraFilters(gHelper)
+		return
+	}
+
+	// Proceed with normal command
 	query := ""
 	for _, label := range searchLabels {
 		query += "label:(" + label + ") "
@@ -106,15 +206,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if query == "" {
 		prnt.StderrLog.Println("No query provided")
 	}
-
-	conf := config.AppConfig()
-	if searchTouch && conf.ApplyLabelOnTouch == "" {
-		prnt.StderrLog.Fatalf("No ApplyLabelOnTouch property found in %s\n",
-			conf.ConfigFile)
-	}
-
-	srv := api.NewGmailClient(api.ModifyScope)
-	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
 	msgs, err := gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, api.IdsOnly)
 	if err != nil {
@@ -137,6 +228,10 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 		util.CheckErr(err)
 
 		hasLoadedMsgDetails = true
+	}
+
+	if len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0 {
+		msgs = applyCustomFilters(msgs, gHelper)
 	}
 
 	if len(msgs) == 0 {
@@ -207,6 +302,16 @@ func init() {
 		"Filter results by interesting messages")
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,
 		"Filter results by uninteresting messages")
+	searchCmd.Flags().BoolVar(&searchDumpCustomFilters, "list-xfilters", false,
+		"List the names of all available extra filters")
+	searchCmd.Flags().StringArrayVarP(&searchCustomFilterNames, "xfilter", "f",
+		[]string{},
+		"Extra filters to apply. May be loaded from plugins. "+
+			"(may be provided multiple times)")
+	searchCmd.Flags().StringArrayVarP(&searchInverseCustomFilterNames, "not-xfilter", "F",
+		[]string{},
+		"Extra filters to apply inversely. May be loaded from plugins. "+
+			"(may be provided multiple times)")
 	searchCmd.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
 		"Only prints out only messageId,threadId (does not prompt)")
 	searchCmd.Flags().BoolVar(&searchPrintJson, "json", false,
