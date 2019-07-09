@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,7 +101,7 @@ func (h *GmailHelper) PrintMessagesJson(msgs []*gm.Message) {
 	fmt.Printf("%s", string(bytes))
 }
 
-func (h *GmailHelper) PrintMessage(m *gm.Message) {
+func (h *GmailHelper) PrintMessage(m *gm.Message, indent int) {
 	var subject string
 	var from string
 	headers, err := api.GetMsgHeaders(m)
@@ -173,7 +174,9 @@ func (h *GmailHelper) PrintMessage(m *gm.Message) {
 		maybeId = m.Id + " "
 	}
 
-	fmt.Printf("%s- %s [%s] %s\n", maybeId, from, strings.Join(labelsToShow, ", "), subject)
+	indentStr := strings.Repeat(" ", indent)
+
+	fmt.Printf("%s%s- %s [%s] %s\n", indentStr, maybeId, from, strings.Join(labelsToShow, ", "), subject)
 }
 
 func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
@@ -201,28 +204,51 @@ func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
 			msgsByCat[noCat] = append(msgsByCat[noCat], m)
 			util.Debugf("Found no category for msg. Had labels %+v\n", m.LabelIds)
 			if util.DebugMode {
-				h.PrintMessage(m)
+				h.PrintMessage(m, 0)
 			}
 		}
 	}
+
+	catNames = append(catNames, noCat)
+	catIds = append(catIds, noCat)
 
 	for i, cat := range catIds {
 		catMsgs := msgsByCat[cat]
 		if len(catMsgs) > 0 {
 			fmt.Println(catNames[i])
+
+			msgsByThread := make(map[string][]*gm.Message)
 			for _, m := range catMsgs {
-				h.PrintMessage(m)
+				var threadMsgs []*gm.Message
+				var ok bool
+				if threadMsgs, ok = msgsByThread[m.ThreadId]; ok {
+					threadMsgs = append(threadMsgs, m)
+				} else {
+					threadMsgs = []*gm.Message{m}
+				}
+				msgsByThread[m.ThreadId] = threadMsgs
+			}
+
+			for threadId, msgs := range msgsByThread {
+				if util.DebugMode {
+					fmt.Println(threadId)
+				}
+
+				sort.Slice(
+					msgs,
+					func(i, j int) bool { return msgs[i].Id < msgs[j].Id })
+				first := true
+				for _, msg := range msgs {
+					if first {
+						h.PrintMessage(msg, 0)
+						first = false
+					} else {
+						h.PrintMessage(msg, 3)
+					}
+				}
 			}
 		}
 	}
-	noCatMsgs := msgsByCat[noCat]
-	if len(noCatMsgs) > 0 {
-		fmt.Println(noCat)
-		for _, m := range noCatMsgs {
-			h.PrintMessage(m)
-		}
-	}
-
 }
 
 func (h *GmailHelper) FilterMessages(

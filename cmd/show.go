@@ -37,7 +37,7 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if showBrief {
-		gHelper.PrintMessage(msg)
+		gHelper.PrintMessage(msg, 0)
 	} else {
 		for _, hdr := range msg.Payload.Headers {
 			fmt.Printf("%s: %s\n", hdr.Name, hdr.Value)
