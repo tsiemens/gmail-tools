@@ -5,6 +5,7 @@ import (
 
 	gm "google.golang.org/api/gmail/v1"
 
+	"errors"
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/config"
@@ -174,7 +175,8 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 	return filteredMsgs
 }
 
-func runSearchCmd(cmd *cobra.Command, args []string) {
+func runSearchCmd(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	if searchInteresting && searchUninteresting {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
@@ -235,8 +237,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if len(msgs) == 0 {
-		prnt.HPrintln(prnt.Always, "Query matched no messages")
-		return
+		return errors.New("Query matched no messages")
 	}
 	prnt.HPrintf(prnt.Always, "Query matched %d messages\n", len(msgs))
 
@@ -277,13 +278,14 @@ func runSearchCmd(cmd *cobra.Command, args []string) {
 	if searchTrash {
 		maybeTrashMessages(msgs, gHelper)
 	}
+	return nil
 }
 
 var searchCmd = &cobra.Command{
 	Use:     "search [QUERY]",
 	Short:   "Searches for messages with the given query",
 	Aliases: []string{"find"},
-	Run:     runSearchCmd,
+	RunE:    runSearchCmd,
 	Args:    cobra.RangeArgs(0, 1),
 }
 
