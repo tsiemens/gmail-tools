@@ -481,6 +481,17 @@ func (h *GmailHelper) MatchesFilter(regex *regexp.Regexp, filter *gm.Filter) boo
 	return regex.MatchString(criteriaStr)
 }
 
+func sortedRange(strMap map[string]string) ([]string){
+	sortedKeys := make([]string, len(strMap))
+	keyIdx := 0
+	for k := range strMap {
+		sortedKeys[keyIdx] = k
+		keyIdx++
+	}
+	sort.Strings(sortedKeys)
+	return sortedKeys
+}
+
 func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	isDiff := (newFilter != nil)
 	prntT := prnt.Always
@@ -509,13 +520,14 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	}
 
 	// Make a set of all keys that need to be shown
-	allCriteriaKeys := map[string]byte{}
+	allCriteriaKeys := map[string]string{}
+	emptyStr := ""
 	for k, _ := range critMap {
-		allCriteriaKeys[k] = 255
+		allCriteriaKeys[k] = emptyStr
 	}
 	if newCritMap != nil {
 		for k, _ := range newCritMap {
-			allCriteriaKeys[k] = 255
+			allCriteriaKeys[k] = emptyStr
 		}
 	}
 
@@ -532,7 +544,7 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		return valStr
 	}
 
-	for k, _ := range allCriteriaKeys {
+	for _, k := range sortedRange( allCriteriaKeys ) {
 		oldValStr := getValDisplayStr(critMap, k)
 		oldValLine := fmt.Sprintf("  %s: %s", k, oldValStr)
 		var newValLine string
@@ -567,8 +579,8 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		actionsMap["Forward"] = filter.Action.Forward
 	}
 
-	for k, v := range actionsMap {
-		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, v))
+	for _, k := range sortedRange( actionsMap ) {
+		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, actionsMap[k]))
 	}
 }
 
