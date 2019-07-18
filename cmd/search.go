@@ -193,7 +193,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 	// Special options, which don't search
 	if searchDumpCustomFilters {
 		dumpExtraFilters(gHelper)
-		return
+		return nil
 	}
 
 	// Proceed with normal command
