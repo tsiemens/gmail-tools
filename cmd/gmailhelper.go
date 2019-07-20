@@ -365,7 +365,7 @@ func (h *GmailHelper) FindOutdatedMessages(baseQuery string) []*gm.Message {
 	}
 
 	outdatedMsgs := make([]*gm.Message, 0, len(outdatedMsgsSet))
-	for id, _ := range outdatedMsgsSet {
+	for id := range outdatedMsgsSet {
 		msg, err := h.Msgs.GetMessage(id, api.IdsOnly)
 		util.CheckErr(err)
 		outdatedMsgs = append(outdatedMsgs, msg)
@@ -509,13 +509,13 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	}
 
 	// Make a set of all keys that need to be shown
-	allCriteriaKeys := map[string]byte{}
-	for k, _ := range critMap {
-		allCriteriaKeys[k] = 255
+	allCriteriaKeys := map[string]bool{}
+	for k := range critMap {
+		allCriteriaKeys[k] = true
 	}
 	if newCritMap != nil {
-		for k, _ := range newCritMap {
-			allCriteriaKeys[k] = 255
+		for k := range newCritMap {
+			allCriteriaKeys[k] = true
 		}
 	}
 
@@ -532,7 +532,7 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		return valStr
 	}
 
-	for k, _ := range allCriteriaKeys {
+	for _, k := range util.SortStrSlice(util.StrBoolMapKeys(allCriteriaKeys)) {
 		oldValStr := getValDisplayStr(critMap, k)
 		oldValLine := fmt.Sprintf("  %s: %s", k, oldValStr)
 		var newValLine string
@@ -567,8 +567,8 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		actionsMap["Forward"] = filter.Action.Forward
 	}
 
-	for k, v := range actionsMap {
-		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, v))
+	for _, k := range util.SortStrSlice(util.StrStrMapKeys(actionsMap)) {
+		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, actionsMap[k]))
 	}
 }
 
