@@ -365,7 +365,7 @@ func (h *GmailHelper) FindOutdatedMessages(baseQuery string) []*gm.Message {
 	}
 
 	outdatedMsgs := make([]*gm.Message, 0, len(outdatedMsgsSet))
-	for id, _ := range outdatedMsgsSet {
+	for id := range outdatedMsgsSet {
 		msg, err := h.Msgs.GetMessage(id, api.IdsOnly)
 		util.CheckErr(err)
 		outdatedMsgs = append(outdatedMsgs, msg)
@@ -481,17 +481,6 @@ func (h *GmailHelper) MatchesFilter(regex *regexp.Regexp, filter *gm.Filter) boo
 	return regex.MatchString(criteriaStr)
 }
 
-func sortedRange(strMap map[string]string) ([]string){
-	sortedKeys := make([]string, len(strMap))
-	keyIdx := 0
-	for k := range strMap {
-		sortedKeys[keyIdx] = k
-		keyIdx++
-	}
-	sort.Strings(sortedKeys)
-	return sortedKeys
-}
-
 func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	isDiff := (newFilter != nil)
 	prntT := prnt.Always
@@ -520,14 +509,13 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 	}
 
 	// Make a set of all keys that need to be shown
-	allCriteriaKeys := map[string]string{}
-	emptyStr := ""
-	for k, _ := range critMap {
-		allCriteriaKeys[k] = emptyStr
+	allCriteriaKeys := map[string]bool{}
+	for k := range critMap {
+		allCriteriaKeys[k] = true
 	}
 	if newCritMap != nil {
-		for k, _ := range newCritMap {
-			allCriteriaKeys[k] = emptyStr
+		for k := range newCritMap {
+			allCriteriaKeys[k] = true
 		}
 	}
 
@@ -544,7 +532,7 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		return valStr
 	}
 
-	for _, k := range sortedRange( allCriteriaKeys ) {
+	for _, k := range util.SortStrSlice(util.StrBoolMapKeys(allCriteriaKeys)) {
 		oldValStr := getValDisplayStr(critMap, k)
 		oldValLine := fmt.Sprintf("  %s: %s", k, oldValStr)
 		var newValLine string
@@ -579,7 +567,7 @@ func (h *GmailHelper) printFilterAndMaybeDiff(filter, newFilter *gm.Filter) {
 		actionsMap["Forward"] = filter.Action.Forward
 	}
 
-	for _, k := range sortedRange( actionsMap ) {
+	for _, k := range util.SortStrSlice(util.StrStrMapKeys(actionsMap)) {
 		prnt.LPrintln(prntT, fmt.Sprintf("  -> %s: %s", k, actionsMap[k]))
 	}
 }
