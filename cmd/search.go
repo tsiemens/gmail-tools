@@ -129,6 +129,9 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 		if filter, ok := allFilters[name]; ok {
 			prnt.Deb.Ln("Will apply filter", name)
 			filtersToApply = append(filtersToApply, filterAndDirection{filter, false})
+		} else {
+			prnt.StderrLog.Fatalf(
+				"'%s' is not an available xfilter. Run search --list-xfilters for available filters.\n", name)
 		}
 	}
 
@@ -136,6 +139,9 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 		if filter, ok := allFilters[name]; ok {
 			prnt.Deb.Ln("Will inversely apply filter", name)
 			filtersToApply = append(filtersToApply, filterAndDirection{filter, true})
+		} else {
+			prnt.StderrLog.Fatalf(
+				"'%s' is not an available xfilter. Run search --list-xfilters for available filters.\n", name)
 		}
 	}
 
