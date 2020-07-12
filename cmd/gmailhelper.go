@@ -373,8 +373,8 @@ func (h *GmailHelper) FindOutdatedMessages(baseQuery string) []*gm.Message {
 	return outdatedMsgs
 }
 
-func (h *GmailHelper) TouchMessages(msgs []*gm.Message) error {
-	return h.Msgs.ApplyLabels(msgs, []api.Label{api.NewLabelWithName(h.conf.ApplyLabelOnTouch)}, nil)
+func (h *GmailHelper) GetTouchLabel() api.Label {
+	return api.NewLabelWithName(h.conf.ApplyLabelOnTouch)
 }
 
 func (h *GmailHelper) GetPlugins() []*plugin.Plugin {

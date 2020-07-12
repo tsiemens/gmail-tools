@@ -51,7 +51,9 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if showTouch {
-		maybeTouchMessages([]*gm.Message{msg}, gHelper)
+		maybeApplyLabels(
+			[]*gm.Message{msg}, gHelper,
+			[]api.Label{gHelper.GetTouchLabel()}, nil)
 	}
 }
 

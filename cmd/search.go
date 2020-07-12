@@ -276,25 +276,26 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if searchTouch {
-		maybeTouchMessages(msgs, gHelper)
-	}
-
-	var searchLabelsToAdd []api.Label = nil
+	var labelsToAdd []api.Label = nil
 	if len(searchLabelNamesToAdd) > 0 {
-		searchLabelsToAdd = api.LabelsFromLabelNames(searchLabelNamesToAdd)
+		labelsToAdd = api.LabelsFromLabelNames(searchLabelNamesToAdd)
 	}
 	var labelsToRemove []api.Label = nil
 	if searchArchive {
-		labelsToRemove = []api.Label{api.NewLabelWithId(inboxLabelId)}
-	}
-	if searchLabelsToAdd != nil || labelsToRemove != nil {
-		maybeApplyLabels(msgs, gHelper, api.LabelsFromLabelNames(searchLabelNamesToAdd), labelsToRemove)
+		labelsToRemove = []api.Label{api.InboxLabel}
 	}
 
-	if searchTrash {
-		maybeTrashMessages(msgs, gHelper)
+	if searchTouch {
+		labelsToAdd = append(labelsToAdd, gHelper.GetTouchLabel())
 	}
+	if searchTrash {
+		labelsToAdd = append(labelsToAdd, api.TrashLabel)
+	}
+
+	if labelsToAdd != nil || labelsToRemove != nil {
+		maybeApplyLabels(msgs, gHelper, labelsToAdd, labelsToRemove)
+	}
+
 	return nil
 }
 

@@ -460,34 +460,6 @@ func (h *MsgHelper) QueryThreads(
 	return threads, nil
 }
 
-type Label struct {
-	name string
-	id   string
-}
-
-func NewLabelWithName(name string) Label {
-	return Label{name: name}
-}
-
-func NewLabelWithId(id string) Label {
-	return Label{id: id}
-}
-
-func LabelsFromLabelNames(labelNames []string) []Label {
-	labels := make([]Label, 0, len(labelNames))
-	for _, ln := range labelNames {
-		labels = append(labels, NewLabelWithName(ln))
-	}
-	return labels
-}
-
-func (l Label) String() string {
-	if l.name != "" {
-		return l.name
-	}
-	return l.id
-}
-
 func (h *MsgHelper) LabelIdForLabel(l *Label) string {
 	if l.id != "" {
 		return l.id
@@ -495,6 +467,7 @@ func (h *MsgHelper) LabelIdForLabel(l *Label) string {
 	return h.LabelIdFromName(l.name)
 }
 
+// If labels is nil or empty, returns nil
 func (h *MsgHelper) LabelIdsForLabels(labels []Label) []string {
 	var labelIds []string = nil
 	if labels != nil && len(labels) > 0 {

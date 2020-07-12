@@ -54,12 +54,3 @@ func maybeApplyLabels(
 		}
 	}
 }
-
-func maybeTouchMessages(msgs []*gm.Message, helper *GmailHelper) {
-	maybeApplyLabels(msgs, helper,
-		[]api.Label{api.NewLabelWithName(helper.conf.ApplyLabelOnTouch)}, nil)
-}
-
-func maybeTrashMessages(msgs []*gm.Message, helper *GmailHelper) {
-	maybeApplyLabels(msgs, helper, []api.Label{api.NewLabelWithName("TRASH")}, nil)
-}
