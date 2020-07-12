@@ -20,6 +20,7 @@ var searchLabelNamesToAdd []string
 var searchTouch = false
 var searchTrash = false
 var searchArchive = false
+var searchOutdated = false
 var searchInteresting = false
 var searchUninteresting = false
 var searchDumpCustomFilters = false
@@ -216,10 +217,18 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 		prnt.StderrLog.Println("No query provided")
 	}
 
-	msgs, err := gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, api.IdsOnly)
-	if err != nil {
-		prnt.StderrLog.Fatalf("%v\n", err)
+	var msgs []*gm.Message = nil
+	var err error = nil
+
+	if searchOutdated {
+		msgs = gHelper.FindOutdatedMessages(query, searchMaxMsgs)
+	} else {
+		msgs, err = gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, api.IdsOnly)
+		if err != nil {
+			prnt.StderrLog.Fatalf("%v\n", err)
+		}
 	}
+
 	prnt.LPrintf(prnt.Debug, "Debug: Query returned %d mesages\n", len(msgs))
 
 	hasLoadedMsgDetails := false
@@ -320,6 +329,8 @@ func init() {
 		"Send messages to the trash")
 	searchCmd.Flags().BoolVar(&searchArchive, "archive", false,
 		"Archive messages (remove from inbox)")
+	searchCmd.Flags().BoolVarP(&searchOutdated, "outdated", "o", false,
+		"Filter in outdated messages only (duplicates, obsolete, etc.)")
 	searchCmd.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,
 		"Filter results by interesting messages")
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,

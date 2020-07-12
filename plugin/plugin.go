@@ -63,7 +63,8 @@ type Plugin struct {
 	MessageInterest           func(*gm.Message, *api.MsgHelper) InterestLevel
 	DetailRequiredForInterest func() api.MessageDetailLevel
 
-	OutdatedMessages func(string, *api.MsgHelper) []*gm.Message
+	// int64 is maxMsgs and will be -1 for unlimited
+	OutdatedMessages func(string, *api.MsgHelper, int64) []*gm.Message
 
 	PrintMessageSummary func([]*gm.Message, *api.MsgHelper)
 

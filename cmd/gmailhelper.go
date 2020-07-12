@@ -350,14 +350,15 @@ func (h *GmailHelper) FilterMessagesByInterest(
 	return h.FilterMessages(msgs, true, detail, filter)
 }
 
-func (h *GmailHelper) FindOutdatedMessages(baseQuery string) []*gm.Message {
+// maxMsgs should be -1 for unlimited
+func (h *GmailHelper) FindOutdatedMessages(baseQuery string, maxMsgs int64) []*gm.Message {
 
 	outdatedMsgsSet := make(map[string]bool, 0)
 
 	for _, plug := range h.GetPlugins() {
 		if plug.OutdatedMessages != nil {
 			prnt.Deb.Ln("Getting outdated messages from", plug.Name, "plugin.")
-			pluginOutdated := plug.OutdatedMessages(baseQuery, h.Msgs)
+			pluginOutdated := plug.OutdatedMessages(baseQuery, h.Msgs, maxMsgs)
 			for _, m := range pluginOutdated {
 				outdatedMsgsSet[m.Id] = true
 			}

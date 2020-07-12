@@ -57,7 +57,7 @@ func (a *Archiver) LoadOutdatedMsgsToArchive(query string) []*gm.Message {
 		query += " label:unread"
 	}
 
-	return a.helper.FindOutdatedMessages(query)
+	return a.helper.FindOutdatedMessages(query, -1)
 }
 
 func (a *Archiver) ArchiveMessages(msgs []*gm.Message) error {
