@@ -16,9 +16,10 @@ import (
 )
 
 var searchLabels []string
-var searchLabelsToAdd []string
+var searchLabelNamesToAdd []string
 var searchTouch = false
 var searchTrash = false
+var searchArchive = false
 var searchInteresting = false
 var searchUninteresting = false
 var searchDumpCustomFilters = false
@@ -275,12 +276,22 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(searchLabelsToAdd) > 0 {
-		maybeApplyLabels(msgs, gHelper, searchLabelsToAdd)
-	}
 	if searchTouch {
 		maybeTouchMessages(msgs, gHelper)
 	}
+
+	var searchLabelsToAdd []api.Label = nil
+	if len(searchLabelNamesToAdd) > 0 {
+		searchLabelsToAdd = api.LabelsFromLabelNames(searchLabelNamesToAdd)
+	}
+	var labelsToRemove []api.Label = nil
+	if searchArchive {
+		labelsToRemove = []api.Label{api.NewLabelWithId(inboxLabelId)}
+	}
+	if searchLabelsToAdd != nil || labelsToRemove != nil {
+		maybeApplyLabels(msgs, gHelper, api.LabelsFromLabelNames(searchLabelNamesToAdd), labelsToRemove)
+	}
+
 	if searchTrash {
 		maybeTrashMessages(msgs, gHelper)
 	}
@@ -300,12 +311,14 @@ func init() {
 
 	searchCmd.Flags().StringArrayVarP(&searchLabels, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")
-	searchCmd.Flags().StringArrayVar(&searchLabelsToAdd, "add-label", []string{},
+	searchCmd.Flags().StringArrayVar(&searchLabelNamesToAdd, "add-label", []string{},
 		"Apply a label to matches (may be provided multiple times)")
 	searchCmd.Flags().BoolVarP(&searchTouch, "touch", "t", false,
 		"Apply 'touched' label from ~/.gmailcli/config.yaml")
 	searchCmd.Flags().BoolVar(&searchTrash, "trash", false,
 		"Send messages to the trash")
+	searchCmd.Flags().BoolVar(&searchArchive, "archive", false,
+		"Archive messages (remove from inbox)")
 	searchCmd.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,
 		"Filter results by interesting messages")
 	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,

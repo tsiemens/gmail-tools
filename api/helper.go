@@ -460,6 +460,52 @@ func (h *MsgHelper) QueryThreads(
 	return threads, nil
 }
 
+type Label struct {
+	name string
+	id   string
+}
+
+func NewLabelWithName(name string) Label {
+	return Label{name: name}
+}
+
+func NewLabelWithId(id string) Label {
+	return Label{id: id}
+}
+
+func LabelsFromLabelNames(labelNames []string) []Label {
+	labels := make([]Label, 0, len(labelNames))
+	for _, ln := range labelNames {
+		labels = append(labels, NewLabelWithName(ln))
+	}
+	return labels
+}
+
+func (l Label) String() string {
+	if l.name != "" {
+		return l.name
+	}
+	return l.id
+}
+
+func (h *MsgHelper) LabelIdForLabel(l *Label) string {
+	if l.id != "" {
+		return l.id
+	}
+	return h.LabelIdFromName(l.name)
+}
+
+func (h *MsgHelper) LabelIdsForLabels(labels []Label) []string {
+	var labelIds []string = nil
+	if labels != nil && len(labels) > 0 {
+		labelIds = make([]string, 0, len(labels))
+		for _, label := range labels {
+			labelIds = append(labelIds, h.LabelIdForLabel(&label))
+		}
+	}
+	return labelIds
+}
+
 func (h *MsgHelper) LabelIdFromName(label string) string {
 	h.requireLabels()
 	for lId, lName := range h.labels {
@@ -512,14 +558,11 @@ func (h *MsgHelper) BatchModifyMessages(msgs []*gm.Message,
 	return nil
 }
 
-func (h *MsgHelper) ApplyLabels(msgs []*gm.Message, labelNames []string) error {
-	labelIds := make([]string, 0, len(labelNames))
-	for _, labelName := range labelNames {
-		labelIds = append(labelIds, h.LabelIdFromName(labelName))
-	}
-
+func (h *MsgHelper) ApplyLabels(
+	msgs []*gm.Message, labelsToAdd []Label, labelsToRemove []Label) error {
 	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds: labelIds,
+		AddLabelIds:    h.LabelIdsForLabels(labelsToAdd),
+		RemoveLabelIds: h.LabelIdsForLabels(labelsToRemove),
 	}
 	return h.BatchModifyMessages(msgs, &modReq)
 }
@@ -532,5 +575,5 @@ func (h *MsgHelper) ApplyLabelsToThreads(threads []*gm.Thread, labelNames []stri
 		}
 	}
 
-	return h.ApplyLabels(allMsgs, labelNames)
+	return h.ApplyLabels(allMsgs, LabelsFromLabelNames(labelNames), nil)
 }
