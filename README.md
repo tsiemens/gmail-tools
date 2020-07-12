@@ -33,6 +33,20 @@ Primary templates use `M3TAP` instead.
 #### Other filter features
 - The `filter replace` command allows you do to do regex replacements on all filters.
 
+### Command Aliases
+As a convenience feature, command aliases can be specified in config.yaml under the
+Aliases section. Each entry consists of the alias name and a command to run.
+
+Aliases MAY reference each other (though there is a maximum depth enforced)
+
+Positional arguments passed to the alias can be placed in a specific location in the
+target command by using $n (starting at $1). Note that positional arguments MUST
+either come before any flags or after the -- marker, since at alias parse time,
+the semantics of the flags in the target command are not yet known.
+
+The remainder of the arguments (not specified explicitly via $n) can also be placed
+with $R. This defaults to the end of the command argument list.
+
 ## Set up/Development
 ### Building
 ```

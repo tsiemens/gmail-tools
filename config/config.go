@@ -25,6 +25,7 @@ type Config struct {
 	ApplyLabelToUninteresting        string            `yaml:"ApplyLabelToUninteresting"`
 	ApplyLabelOnTouch                string            `yaml:"ApplyLabelOnTouch"`
 	LabelColors                      map[string]string `yaml:"LabelColors"`
+	Aliases                          map[string]string `yaml:"Aliases"`
 
 	AlwaysUninterLabelRegexps []*regexp.Regexp
 	UninterLabelRegexps       []*regexp.Regexp
@@ -32,6 +33,7 @@ type Config struct {
 	ConfigFile                string
 }
 
+// May be called at any time (all dependencies are static)
 func loadConfig() *Config {
 	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
 
