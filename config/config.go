@@ -22,7 +22,6 @@ type Config struct {
 	AlwaysUninterestingLabelPatterns []string          `yaml:"AlwaysUninterestingLabelPatterns"`
 	UninterestingLabelPatterns       []string          `yaml:"UninterestingLabelPatterns"`
 	InterestingLabelPatterns         []string          `yaml:"InterestingLabelPatterns"`
-	ApplyLabelToUninteresting        string            `yaml:"ApplyLabelToUninteresting"`
 	ApplyLabelOnTouch                string            `yaml:"ApplyLabelOnTouch"`
 	LabelColors                      map[string]string `yaml:"LabelColors"`
 	Aliases                          map[string]string `yaml:"Aliases"`

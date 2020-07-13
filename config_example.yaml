@@ -13,11 +13,10 @@ InterestingLabelPatterns:
    - MyImportantDir/.*
 
 ApplyLabelOnTouch: xCliTouched
-ApplyLabelToUninteresting: xCliUninteresting
-ApplyLabelToInteresting: xCliInteresting
 
 LabelColors:
    MyLabel: blue
 
 Aliases:
    search-foo: search "\"Some fairly long search term\" $1"
+   archive: search -q --archive --add-label MyArchiveLabel --uninteresting "in:inbox category:{updates forums} $1"

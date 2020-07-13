@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"strings"
+
 	"github.com/golang-collections/collections/stack"
 	"github.com/spf13/cobra"
 
@@ -12,14 +14,21 @@ import (
 
 const (
 	MaxAliasRecursion int = 10
+
+	maxAliasLenForHelpStr int = 45
 )
 
 var aliasStack = stack.New()
 
 func makeAlias(aliasStr string, target string) *cobra.Command {
+	helpStr := target
+	if len(helpStr) > maxAliasLenForHelpStr {
+		helpStr = strings.Trim(helpStr[:maxAliasLenForHelpStr], " ") + " ..."
+	}
+
 	return &cobra.Command{
 		Use:                aliasStr,
-		Short:              "User defined alias for " + target,
+		Short:              "~ Alias for " + helpStr,
 		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			aliasStack.Push(aliasStr)
