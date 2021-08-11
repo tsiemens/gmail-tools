@@ -1,5 +1,7 @@
 CURDIR=$(shell pwd)
 export GOPATH=$(shell echo $$(readlink -f $(CURDIR)/../../../..))
+# Turn off go modules
+export GO111MODULE=off
 
 PLUGINSDIR=$(HOME)/.gmailcli/plugins
 
