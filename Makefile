@@ -1,7 +1,5 @@
 CURDIR=$(shell pwd)
 export GOPATH=$(shell echo $$(readlink -f $(CURDIR)/../../../..))
-# Turn off go modules
-export GO111MODULE=off
 
 PLUGINSDIR=$(HOME)/.gmailcli/plugins
 
@@ -19,8 +17,8 @@ getdeps:
 	go get -u github.com/spf13/cobra/cobra
 	go get -u github.com/google/shlex
 	go get -u github.com/tsiemens/go-concurrentMap
-	go get github.com/golang-collections/collections
-	go get gopkg.in/yaml.v2
+	go get -u github.com/golang-collections/collections
+	go get -u gopkg.in/yaml.v2
 
 clean:
 	rm bld/gmailcli
