@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
@@ -32,8 +33,15 @@ type Config struct {
 	ConfigFile                string
 }
 
-// May be called at any time (all dependencies are static)
-func loadConfig() *Config {
+// LoadConfigInto loads the central config file contents into confOut object.
+// If the file does not exist, it is created. If it cannot be created or read,
+// the process will be terminated.
+// Returns the name of the loaded config file.
+//
+// confOut : A config object marked up for yaml unmarshaling.
+//           This may be any subset of the config file, allowing for use by
+//           plugins to add extra fields into the config file for their own use.
+func LoadConfigInto(confOut interface{}) string {
 	confFname := util.RequiredHomeDirAndFile(util.UserAppDirName, ConfigYamlFileName)
 
 	var confData []byte
@@ -57,35 +65,44 @@ func loadConfig() *Config {
 		log.Fatalf("Failed to read file: %v", err)
 	}
 
-	conf := &Config{}
-	conf.ConfigFile = confFname
-	err = yaml.Unmarshal(confData, conf)
+	err = yaml.Unmarshal(confData, confOut)
 	if err != nil {
 		log.Fatalf("Could not unmarshal: %v", err)
 	}
-	util.Debugf("config: %+v\n", conf)
+	util.Debugf("config: %+v\n", confOut)
 
-	checkLoadErr := func(e error) {
-		if err != nil {
-			log.Fatalf("Failed to load config: \"%s\"", err)
-		}
+	return confFname
+}
+
+func UserFriendlyMustCompile(pattern string, attrName string, configComponent string) *regexp.Regexp {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		prnt.StderrLog.Fatalf("Error loading %s config attribute %s '%s': %v\n",
+			configComponent, attrName, pattern, err)
 	}
+	return re
+}
 
+// May be called at any time (all dependencies are static)
+func loadConfig() *Config {
+	conf := &Config{}
+	confFname := LoadConfigInto(conf)
+	conf.ConfigFile = confFname
+
+	comp := "main"
 	for _, pat := range conf.AlwaysUninterestingLabelPatterns {
-		re, err := regexp.Compile(caseIgnore + pat)
-		checkLoadErr(err)
+		re := UserFriendlyMustCompile(
+			caseIgnore+pat, "AlwaysUninterestingLabelPatterns", comp)
 		conf.AlwaysUninterLabelRegexps = append(conf.AlwaysUninterLabelRegexps, re)
 	}
 
 	for _, pat := range conf.UninterestingLabelPatterns {
-		re, err := regexp.Compile(caseIgnore + pat)
-		checkLoadErr(err)
+		re := UserFriendlyMustCompile(caseIgnore+pat, "UninterestingLabelPatterns", comp)
 		conf.UninterLabelRegexps = append(conf.UninterLabelRegexps, re)
 	}
 
 	for _, pat := range conf.InterestingLabelPatterns {
-		re, err := regexp.Compile(caseIgnore + pat)
-		checkLoadErr(err)
+		re := UserFriendlyMustCompile(caseIgnore+pat, "InterestingLabelPatterns", comp)
 		conf.InterLabelRegexps = append(conf.InterLabelRegexps, re)
 	}
 	return conf
