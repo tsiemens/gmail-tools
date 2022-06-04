@@ -47,20 +47,25 @@ func TestCheckDelims(t *testing.T) {
 	}
 }
 
+// StrFilterElement with custom delims and whitespace
 var FeDW func(fs string, delims string, preWs string, postWs string,
 ) *f.FilterElement = f.NewStrFilterElement
 
+// StrFilterElement with no delimiters or whitespace
 func Fe(fs string) *f.FilterElement {
 	return FeDW(fs, "", "", "")
 }
 
+// SubElemFilterElement with custom delims and whitespace
 var SeFeDW func(ses []*f.FilterElement, delims string, preWs string, postWs string,
 ) *f.FilterElement = f.NewSubElemFilterElement
 
+// SubElemFilterElement with no delimiters or whitespace
 func SeFe(ses ...*f.FilterElement) *f.FilterElement {
 	return SeFeDW(ses, "", "", "")
 }
 
+// Parse str into a FilterElement
 func prs(str string) *f.FilterElement {
 	pe, err := f.ParseElement(str)
 	if err != nil {
@@ -69,6 +74,7 @@ func prs(str string) *f.FilterElement {
 	return pe
 }
 
+// First sub-elem of a FilterElement for str
 func prsf(str string) *f.FilterElement {
 	return prs(str).SubElems[0]
 }
@@ -145,6 +151,7 @@ func TestParse(t *testing.T) {
 		{"\"\"", SeFe(FeDW("", "\"\"", "", ""))},
 		{"\"(blar)\"", SeFe(FeDW("(blar)", "\"\"", "", ""))},
 		{"(\"(blar)\")", SeFe(SeFeDW(fes(prsf("\"(blar)\"")), "()", "", ""))},
+		{"(\"(blar)\" )", SeFe(SeFeDW(fes(FeDW("(blar)", "\"\"", "", " ")), "()", "", ""))},
 	}
 
 	for _, tup := range toCheck {

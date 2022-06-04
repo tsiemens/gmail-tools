@@ -251,6 +251,7 @@ func (p *ElementParser) parseDelimitedGroup(startIdx int) (*FilterElement, int, 
 }
 
 func (p *ElementParser) parseNext() (*FilterElement, error) {
+	util.Debugln("ElementParser.parseNext")
 	mode := PRE_TEXT_MODE
 	delims := ""
 	substr := ""
@@ -262,6 +263,7 @@ func (p *ElementParser) parseNext() (*FilterElement, error) {
 	breakIter := false
 
 	i := p.currIdx
+	util.Debugf("parseNext: currIdx: %d filterStr: '%s'\n", i, p.filterStr)
 	for ; i <= p.lastIdx; i++ {
 		switch mode {
 		case PRE_TEXT_MODE:
@@ -309,7 +311,14 @@ func (p *ElementParser) parseNext() (*FilterElement, error) {
 		case QUOTED_TEXT_MODE:
 			if p.filterStr[i] == '"' {
 				i++
-				breakIter = true
+				if len(p.filterStr) > i && p.filterStr[i] == ' ' {
+					// There is whitespace after the closing delim. Count it as part
+					// of this element.
+					mode = POST_TEXT_MODE
+					i--
+				} else {
+					breakIter = true
+				}
 			} else {
 				substr += string(p.filterStr[i])
 			}
@@ -350,6 +359,7 @@ func (p *ElementParser) parseNext() (*FilterElement, error) {
 }
 
 func (p *ElementParser) Parse() (*FilterElement, error) {
+	util.Debugln("ElementParser.Parse")
 	err := p.CheckDelims()
 	if err != nil {
 		return nil, err
