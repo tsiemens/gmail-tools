@@ -2,11 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -14,6 +18,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 
+	"github.com/tsiemens/gmail-tools/prnt"
 	"github.com/tsiemens/gmail-tools/util"
 )
 
@@ -82,12 +87,51 @@ func getClient(ctx context.Context, config *oauth2.Config, scope *ScopeProfile) 
 	return config.Client(ctx, tok)
 }
 
+func DeleteCachedScopeToken(scope *ScopeProfile) {
+	cacheFile, err := tokenCacheFile(scope)
+	if err != nil {
+		log.Fatalf("Unable to get path to cached credential file. %v", err)
+	}
+	err = os.Remove(cacheFile)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			log.Fatalf("Unable to delete %s: %v", cacheFile, err)
+		}
+	}
+}
+
+// Opens a browser window/tab with url.
+// Returns true if the command executed successfully.
+func openBrowserTab(url string) {
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		// Mac
+		args = []string{"open"}
+	case "windows":
+		args = []string{"cmd", "/c", "start"}
+	default:
+		// Linux
+		args = []string{"xdg-open"}
+	}
+	cmd := exec.Command(args[0], append(args[1:], url)...)
+	err := cmd.Start()
+	if err != nil {
+		prnt.StderrLog.Printf("Error opening browser: %v\n", err)
+	}
+}
+
 // getTokenFromWeb uses Config to request a Token.
 // It returns the retrieved Token.
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser then type the "+
-		"authorization code: \n%v\n", authURL)
+	fmt.Println("A browser tab/window should open automatically to proceed with the " +
+		"authentication process. Once complete, paste the authorization code into the " +
+		"terminal below.")
+	fmt.Printf("If the browser page does not open, paste the following link in your "+
+		"browser:\n\n%v\n\n", authURL)
+	fmt.Printf("Paste Authorization code here: ")
+	openBrowserTab(authURL)
 
 	var code string
 	if _, err := fmt.Scan(&code); err != nil {

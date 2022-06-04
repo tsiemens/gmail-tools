@@ -95,7 +95,7 @@ func (h *GmailHelper) PrintMessagesJson(msgs []*gm.Message) {
 
 	bytes, err := json.MarshalIndent(msgsJson, "", "  ")
 	if err != nil {
-		fmt.Errorf("Failed to martial messages: %v", err)
+		prnt.StderrLog.Printf("Failed to martial messages: %v", err)
 		return
 	}
 	fmt.Printf("%s", string(bytes))
