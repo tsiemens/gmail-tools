@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"regexp"
 	"strings"
 
 	gm "google.golang.org/api/gmail/v1"
@@ -15,7 +16,7 @@ import (
 	"github.com/tsiemens/gmail-tools/util"
 )
 
-var searchLabels []string
+var searchLabelRegexps []string
 var searchLabelNamesToAdd []string
 var searchTouch = false
 var searchTrash = false
@@ -206,9 +207,6 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 
 	// Proceed with normal command
 	query := ""
-	for _, label := range searchLabels {
-		query += "label:(" + label + ") "
-	}
 	if len(args) > 0 {
 		query += args[0] + " "
 	}
@@ -220,16 +218,28 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 	var msgs []*gm.Message = nil
 	var err error = nil
 
+	initialQueryDetail := api.IdsOnly
+	var compiledLabelRegexps []*regexp.Regexp
+	if len(searchLabelRegexps) > 0 {
+		initialQueryDetail = api.LabelsOnly
+		compiledLabelRegexps = gHelper.MustCompileLabelRegexps(searchLabelRegexps)
+	}
+
 	if searchOutdated {
 		msgs = gHelper.FindOutdatedMessages(query, searchMaxMsgs)
 	} else {
-		msgs, err = gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, api.IdsOnly)
+		msgs, err = gHelper.Msgs.QueryMessages(query, false, false, searchMaxMsgs, initialQueryDetail)
 		if err != nil {
 			prnt.StderrLog.Fatalf("%v\n", err)
 		}
 	}
 
 	prnt.LPrintf(prnt.Debug, "Debug: Query returned %d mesages\n", len(msgs))
+
+	if len(compiledLabelRegexps) > 0 {
+		msgs, err = gHelper.FilterMessagesByLabelRegexps(compiledLabelRegexps, msgs)
+		util.CheckErr(err)
+	}
 
 	hasLoadedMsgDetails := false
 
@@ -319,7 +329,7 @@ var searchCmd = &cobra.Command{
 func init() {
 	RootCmd.AddCommand(searchCmd)
 
-	searchCmd.Flags().StringArrayVarP(&searchLabels, "labelp", "l", []string{},
+	searchCmd.Flags().StringArrayVarP(&searchLabelRegexps, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")
 	searchCmd.Flags().StringArrayVar(&searchLabelNamesToAdd, "add-label", []string{},
 		"Apply a label to matches (may be provided multiple times)")

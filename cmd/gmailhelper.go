@@ -337,6 +337,41 @@ func (h *GmailHelper) FilterMessages(
 	return matchedMsgs, nil
 }
 
+func (h *GmailHelper) MustCompileLabelRegexps(labelRegexps []string) []*regexp.Regexp {
+	compiledRegexps := make([]*regexp.Regexp, 0, len(labelRegexps))
+	for _, lr := range labelRegexps {
+		compiled, err := regexp.Compile(lr)
+		if err != nil {
+			prnt.StderrLog.Fatalln("Failed to compile label regex pattern:", err)
+		}
+		compiledRegexps = append(compiledRegexps, compiled)
+	}
+	return compiledRegexps
+}
+
+func (h *GmailHelper) MessageMatchesLabelRegexps(
+	msg *gm.Message, labelRegexps []*regexp.Regexp) bool {
+
+	for _, label := range h.Msgs.MessageLabelNames(msg) {
+		for _, regx := range labelRegexps {
+			if regx.MatchString(label) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (h *GmailHelper) FilterMessagesByLabelRegexps(
+	labelRegexps []*regexp.Regexp, msgs []*gm.Message) ([]*gm.Message, error) {
+
+	filter := func(msg *gm.Message, h *GmailHelper) bool {
+		return h.MessageMatchesLabelRegexps(msg, labelRegexps)
+	}
+
+	return h.FilterMessages(msgs, false, api.LabelsOnly, filter)
+}
+
 func (h *GmailHelper) FilterMessagesByInterest(
 	interest InterestCategory, msgs []*gm.Message) ([]*gm.Message, error) {
 
