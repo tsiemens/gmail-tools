@@ -364,4 +364,5 @@ func init() {
 	searchCmd.Flags().Int64VarP(&searchMaxMsgs, "max", "m", -1,
 		"Set a max on how many results are queried.")
 	addDryFlag(searchCmd)
+	addAssumeYesFlag(searchCmd)
 }
