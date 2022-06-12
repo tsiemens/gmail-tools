@@ -117,11 +117,26 @@ func threadHasMultipleSenders(m *gm.Message, helper *api.MsgHelper) bool {
 	return false
 }
 
+func threadHasMultipleMessages(m *gm.Message, helper *api.MsgHelper) bool {
+	thread, err := helper.GetThread(m.ThreadId, api.LabelsOnly)
+	if err != nil {
+		prnt.StderrLog.Println("Error retrieving thread:", err)
+		return false
+	}
+	prnt.Deb.Ln("code.threadHasMultipleSenders thread for msg", m.Id, "has",
+		len(thread.Messages), "messages")
+	return len(thread.Messages) > 1
+}
+
 func builder() *plugin.Plugin {
 	filters := make(map[string]*plugin.MessageFilter)
 	filters["thread-has-multiple-senders"] = &plugin.MessageFilter{
 		Desc:    "Match if there are messages in a message's thread, not all from the same address.",
 		Matches: threadHasMultipleSenders,
+	}
+	filters["thread-has-multiple-messages"] = &plugin.MessageFilter{
+		Desc:    "Match if there is more than one message in a message's thread (includes messages in trash).",
+		Matches: threadHasMultipleMessages,
 	}
 
 	return &plugin.Plugin{
