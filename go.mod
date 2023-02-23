@@ -10,10 +10,9 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tsiemens/go-concurrentMap v0.0.0-20171014221507-fa7d41cdb03d
-	golang.org/x/net v0.0.0-20210813160813-60bc85c4be6d
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5
-	golang.org/x/sys v0.0.0-20210816074244-15123e1e1f71 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.3.8 // indirect
 	google.golang.org/api v0.54.0
 	google.golang.org/genproto v0.0.0-20210816143620-e15ff196659d // indirect
 	gopkg.in/yaml.v2 v2.4.0
