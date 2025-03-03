@@ -494,41 +494,101 @@ const (
 	MaxBatchModifySize = 500
 )
 
-func (h *MsgHelper) BatchModifyMessages(msgs []*gm.Message,
-	modReq *gm.BatchModifyMessagesRequest) error {
+type SizedMessageIdIterator interface {
+	Next() (string, bool)
+	Len() int
+}
 
+type MessageListIterator struct {
+	messages []*gm.Message
+	index    int
+}
+
+func (ml *MessageListIterator) Next() (string, bool) {
+	if ml.index >= len(ml.messages) {
+		return "", false
+	}
+	id := ml.messages[ml.index].Id
+	ml.index++
+	return id, true
+}
+
+func SizedMessageIdIteratorFromMsgs(msgs []*gm.Message) SizedMessageIdIterator {
+	return &MessageListIterator{messages: msgs}
+}
+
+func (ml *MessageListIterator) Len() int {
+	return len(ml.messages)
+}
+
+type MessageIdListIterator struct {
+	ids   []string
+	index int
+}
+
+func (mil *MessageIdListIterator) Next() (string, bool) {
+	if mil.index >= len(mil.ids) {
+		return "", false
+	}
+	id := mil.ids[mil.index]
+	mil.index++
+	return id, true
+}
+
+func (mil *MessageIdListIterator) Len() int {
+	return len(mil.ids)
+}
+
+func SizedMessageIdIteratorFromIds(ids []string) SizedMessageIdIterator {
+	return &MessageIdListIterator{ids: ids}
+}
+
+func (h *MsgHelper) BatchModifyByIdIter(
+	iterator SizedMessageIdIterator, modReq *gm.BatchModifyMessagesRequest) error {
 	var err error
-	nMsgs := len(msgs)
-	msgsLeft := nMsgs
+	nItems := iterator.Len()
+	itemsLeft := nItems
 
-	nBatches := nMsgs / MaxBatchModifySize
-	if nMsgs%MaxBatchModifySize != 0 {
+	nBatches := nItems / MaxBatchModifySize
+	if nItems%MaxBatchModifySize != 0 {
 		nBatches++
 	}
 
 	prnt.HPrintf(prnt.Quietable, "Applying changes to ")
-	msgIdx := 0
 	for batch := 0; batch < nBatches; batch++ {
-		batchSize := util.IntMin(msgsLeft, MaxBatchModifySize)
-		prnt.HPrintf(prnt.Quietable, "%d... ", msgIdx+batchSize)
+		batchSize := util.IntMin(itemsLeft, MaxBatchModifySize)
+		prnt.HPrintf(prnt.Quietable, "%d... ", nItems-itemsLeft+batchSize)
 
-		msgIds := make([]string, 0, batchSize)
+		ids := make([]string, 0, batchSize)
 		for i := 0; i < batchSize; i++ {
-			msgIds = append(msgIds, msgs[msgIdx].Id)
-			msgIdx++
+			id, ok := iterator.Next()
+			if !ok {
+				break
+			}
+			ids = append(ids, id)
 		}
 
-		modReq.Ids = msgIds
+		modReq.Ids = ids
 		err = h.srv.Users.Messages.BatchModify(h.User, modReq).Do()
 		if err != nil {
 			return err
 		}
 
-		msgsLeft -= batchSize
+		itemsLeft -= batchSize
 	}
 	prnt.HPrintf(prnt.Quietable, "Done\n")
 
 	return nil
+}
+
+func (h *MsgHelper) BatchModifyMessages(msgs []*gm.Message, modReq *gm.BatchModifyMessagesRequest) error {
+	iterator := SizedMessageIdIteratorFromMsgs(msgs)
+	return h.BatchModifyByIdIter(iterator, modReq)
+}
+
+func (h *MsgHelper) BatchModifyMessagesByIds(ids []string, modReq *gm.BatchModifyMessagesRequest) error {
+	iterator := SizedMessageIdIteratorFromIds(ids)
+	return h.BatchModifyByIdIter(iterator, modReq)
 }
 
 func (h *MsgHelper) ApplyLabels(
@@ -538,6 +598,15 @@ func (h *MsgHelper) ApplyLabels(
 		RemoveLabelIds: h.LabelIdsForLabels(labelsToRemove),
 	}
 	return h.BatchModifyMessages(msgs, &modReq)
+}
+
+func (h *MsgHelper) ApplyLabelsByIdIter(
+	msgs SizedMessageIdIterator, labelsToAdd []Label, labelsToRemove []Label) error {
+	modReq := gm.BatchModifyMessagesRequest{
+		AddLabelIds:    h.LabelIdsForLabels(labelsToAdd),
+		RemoveLabelIds: h.LabelIdsForLabels(labelsToRemove),
+	}
+	return h.BatchModifyByIdIter(msgs, &modReq)
 }
 
 func (h *MsgHelper) ApplyLabelsToThreads(threads []*gm.Thread, labelNames []string) error {

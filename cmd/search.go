@@ -7,6 +7,7 @@ import (
 	gm "google.golang.org/api/gmail/v1"
 
 	"errors"
+
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
 	"github.com/tsiemens/gmail-tools/config"
@@ -17,10 +18,6 @@ import (
 )
 
 var searchLabelRegexps []string
-var searchLabelNamesToAdd []string
-var searchTouch = false
-var searchTrash = false
-var searchArchive = false
 var searchOutdated = false
 var searchInteresting = false
 var searchUninteresting = false
@@ -191,10 +188,7 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	conf := config.AppConfig()
-	if searchTouch && conf.ApplyLabelOnTouch == "" {
-		prnt.StderrLog.Fatalf("No ApplyLabelOnTouch property found in %s\n",
-			conf.ConfigFile)
-	}
+	ValidateTouchOption(conf)
 
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
@@ -295,30 +289,12 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	var labelsToAdd []api.Label = nil
-	if len(searchLabelNamesToAdd) > 0 {
-		labelsToAdd = api.LabelsFromLabelNames(searchLabelNamesToAdd)
-	}
-	var labelsToRemove []api.Label = nil
-	if searchArchive {
-		labelsToRemove = []api.Label{api.InboxLabel}
-	}
-
-	if searchTouch {
-		labelsToAdd = append(labelsToAdd, gHelper.GetTouchLabel())
-	}
-	if searchTrash {
-		labelsToAdd = append(labelsToAdd, api.TrashLabel)
-	}
-
-	if labelsToAdd != nil || labelsToRemove != nil {
-		maybeApplyLabels(msgs, gHelper, labelsToAdd, labelsToRemove)
-	}
+	modifyMsgLabels(gHelper, msgs, &CmdMsgLabelModOptions)
 
 	return nil
 }
 
-var searchCmd = &cobra.Command{
+var command = &cobra.Command{
 	Use:     "search [QUERY]",
 	Short:   "Searches for messages with the given query",
 	Aliases: []string{"find"},
@@ -327,42 +303,36 @@ var searchCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.AddCommand(searchCmd)
+	RootCmd.AddCommand(command)
 
-	searchCmd.Flags().StringArrayVarP(&searchLabelRegexps, "labelp", "l", []string{},
+	command.Flags().StringArrayVarP(&searchLabelRegexps, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")
-	searchCmd.Flags().StringArrayVar(&searchLabelNamesToAdd, "add-label", []string{},
-		"Apply a label to matches (may be provided multiple times)")
-	searchCmd.Flags().BoolVarP(&searchTouch, "touch", "t", false,
-		"Apply 'touched' label from ~/.gmailcli/config.yaml")
-	searchCmd.Flags().BoolVar(&searchTrash, "trash", false,
-		"Send messages to the trash")
-	searchCmd.Flags().BoolVar(&searchArchive, "archive", false,
-		"Archive messages (remove from inbox)")
-	searchCmd.Flags().BoolVarP(&searchOutdated, "outdated", "o", false,
+	command.Flags().BoolVarP(&searchOutdated, "outdated", "o", false,
 		"Filter in outdated messages only (duplicates, obsolete, etc.)")
-	searchCmd.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,
+	command.Flags().BoolVarP(&searchInteresting, "interesting", "i", false,
 		"Filter results by interesting messages")
-	searchCmd.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,
+	command.Flags().BoolVarP(&searchUninteresting, "uninteresting", "u", false,
 		"Filter results by uninteresting messages")
-	searchCmd.Flags().BoolVar(&searchDumpCustomFilters, "list-xfilters", false,
+	command.Flags().BoolVar(&searchDumpCustomFilters, "list-xfilters", false,
 		"List the names of all available extra filters")
-	searchCmd.Flags().StringArrayVarP(&searchCustomFilterNames, "xfilter", "f",
+	command.Flags().StringArrayVarP(&searchCustomFilterNames, "xfilter", "f",
 		[]string{},
 		"Extra filters to apply. May be loaded from plugins. "+
 			"(may be provided multiple times)")
-	searchCmd.Flags().StringArrayVarP(&searchInverseCustomFilterNames, "not-xfilter", "F",
+	command.Flags().StringArrayVarP(&searchInverseCustomFilterNames, "not-xfilter", "F",
 		[]string{},
 		"Extra filters to apply inversely. May be loaded from plugins. "+
 			"(may be provided multiple times)")
-	searchCmd.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
+	command.Flags().BoolVar(&searchPrintIdsOnly, "ids-only", false,
 		"Only prints out only messageId,threadId (does not prompt)")
-	searchCmd.Flags().BoolVar(&searchPrintJson, "json", false,
+	command.Flags().BoolVar(&searchPrintJson, "json", false,
 		"Print message details formatted as json")
-	searchCmd.Flags().BoolVar(&searchShowSummary, "summary", false,
+	command.Flags().BoolVar(&searchShowSummary, "summary", false,
 		"Print a statistical summary of the matched messages")
-	searchCmd.Flags().Int64VarP(&searchMaxMsgs, "max", "m", -1,
+	command.Flags().Int64VarP(&searchMaxMsgs, "max", "m", -1,
 		"Set a max on how many results are queried.")
-	addDryFlag(searchCmd)
-	addAssumeYesFlag(searchCmd)
+
+	addLabelModFlags(command)
+	addDryFlag(command)
+	addAssumeYesFlag(command)
 }
