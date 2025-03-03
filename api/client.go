@@ -121,24 +121,65 @@ func openBrowserTab(url string) {
 	}
 }
 
+// Starts a very simple webserver in a new sudo'd subprocess on http port 80.
+// The server simply checks for the 'code' query parameter in the request URL,
+// or if one doesn't exist, shows a form to enter it.
+// Exits after it gets a code and returns it from this function.
+func startCodeFetcherWebserver() string {
+	codeChan := make(chan string)
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		if code != "" {
+			fmt.Fprintf(w, "Authorization code received. You can close this window.")
+			codeChan <- code
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body>
+			<form action="/" method="GET">
+				Enter Authorization Code: <input type="text" name="code">
+				<input type="submit" value="Submit">
+			</form>
+			</body></html>`)
+	})
+
+	server := &http.Server{Addr: ":8080"}
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Could not start web server: %v", err)
+		}
+	}()
+
+	code := <-codeChan
+	server.Close()
+	return code
+}
+
 // getTokenFromWeb uses Config to request a Token.
 // It returns the retrieved Token.
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	var configCopy oauth2.Config = *config
+	configCopy.RedirectURL = "http://localhost:8080"
+
+	authURL := configCopy.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Println("A browser tab/window should open automatically to proceed with the " +
-		"authentication process. Once complete, paste the authorization code into the " +
-		"terminal below.")
+		"authentication process.")
 	fmt.Printf("If the browser page does not open, paste the following link in your "+
 		"browser:\n\n%v\n\n", authURL)
-	fmt.Printf("Paste Authorization code here: ")
+	// fmt.Printf("Paste Authorization code here: ")
 	openBrowserTab(authURL)
 
-	var code string
-	if _, err := fmt.Scan(&code); err != nil {
-		log.Fatalf("Unable to read authorization code %v", err)
-	}
+	fmt.Println("Starting local endpoint at http://localhost:8080 "+
+		"(the authentication flow from link above should redirect here automatically. "+
+		"If not, open the link in your browser and enter the code by hand. "+
+		"It should be in the URL the auth flow tries to redirect to).")
 
-	tok, err := config.Exchange(oauth2.NoContext, code)
+	code := startCodeFetcherWebserver()
+
+	tok, err := configCopy.Exchange(oauth2.NoContext, code)
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web %v", err)
 	}
