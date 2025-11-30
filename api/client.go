@@ -216,26 +216,47 @@ func getClientSecret() ([]byte, error) {
 	return ioutil.ReadFile(secretFname)
 }
 
+func styledClientSecretInstructions() string {
+	bold := prnt.Style().Bold().Codes()
+	normal := prnt.Style().Normal().Codes()
+
+	return fmt.Sprintf("gmailcli requires a %spersonal%s API project in the Google developer console.\n" +
+		"1. Go to %shttps://console.developers.google.com%s\n" +
+		"2. Create a new project\n" +
+		"3. Go to the Credential section in the new project\n" +
+		"4. Click \"Create credentials\", and select OAuth client ID\n" +
+		"5. Select type \"Other\" for the credential\n" +
+		"6. Click the \"Download JSON\" button on the new credential.\n" +
+		"7. Move the downloaded credential file to %s%s%s",
+		bold, normal,
+		bold, normal,
+		bold, clientSecretFile(), normal,
+	)
+}
+
 func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 	ctx := context.Background()
 
 	secret, err := getClientSecret()
 	if err != nil {
-		util.ExternFatalf("Unable to read client secret file: %v\n"+
-			"To proceed, add a credentials file named '%s'. See the README for "+
-			"information about getting a client secret file from "+
-			"the Google developer console.\n", err, clientSecretFile())
+		util.ExternFatalf("%s: %v\n\n%s\n",
+			prnt.Style().FgRed().Bold().On("Error reading client secret file"),
+			err, styledClientSecretInstructions())
 	}
 
 	config, err := google.ConfigFromJSON(secret, scope.ScopesString())
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		util.ExternFatalf("%s: %v\n\n%s\n",
+			prnt.Style().FgRed().Bold().On(
+				"Error: Unable to parse client secret file " + clientSecretFile()),
+			err, styledClientSecretInstructions())
 	}
 	client := getClient(ctx, config, scope)
 
 	srv, err := gmail.New(client)
 	if err != nil {
-		log.Fatalf("Unable to retrieve gmail Client %v", err)
+		util.ExternFatalf("%s %v",
+			prnt.Style().FgRed().Bold().On("Error creating Gmail client"), err)
 	}
 	return srv
 }
