@@ -16,6 +16,7 @@ import (
 var showTouch = false
 var showHeadersOnly = false
 var showBrief = false
+var showRaw = false
 
 func runShowCmd(cmd *cobra.Command, args []string) {
 	if showHeadersOnly && showBrief {
@@ -31,13 +32,20 @@ func runShowCmd(cmd *cobra.Command, args []string) {
 	srv := api.NewGmailClient(api.ModifyScope)
 	gHelper := NewGmailHelper(srv, api.DefaultUser, conf)
 
-	msg, err := gHelper.Msgs.GetMessage(msgId, api.LabelsAndPayload)
+	detailLevel := api.LabelsAndPayload
+	if showRaw {
+		detailLevel = api.Raw
+	}
+
+	msg, err := gHelper.Msgs.GetMessage(msgId, detailLevel)
 	if err != nil {
 		prnt.StderrLog.Fatalf("%v\n", err)
 	}
 
 	if showBrief {
 		gHelper.PrintMessage(msg, 0)
+	} else if showRaw {
+		fmt.Printf("%s\n", api.GetMessageRaw(msg))
 	} else {
 		for _, hdr := range msg.Payload.Headers {
 			fmt.Printf("%s: %s\n", hdr.Name, hdr.Value)
@@ -74,6 +82,8 @@ func init() {
 		"Don't print the message body")
 	showCmd.Flags().BoolVarP(&showBrief, "brief", "b", false,
 		"Print only a brief summary of the message")
+	showCmd.Flags().BoolVarP(&showRaw, "raw", "r", false,
+		"Print the raw message")
 	addDryFlag(showCmd)
 	addAssumeYesFlag(showCmd)
 }

@@ -119,6 +119,15 @@ func MessageHasBody(msg *gm.Message) bool {
 	return msg.Payload != nil && msg.Payload.Body != nil
 }
 
+func GetMessageRaw(msg *gm.Message) string {
+	data := msg.Raw
+	decoder := base64.NewDecoder(base64.URLEncoding, strings.NewReader(data))
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(decoder)
+	b := buf.Bytes()
+	return string(b[:])
+}
+
 func MessagesLatestFirst(msgs []*gm.Message) []*gm.Message {
 	sorted := make([]*gm.Message, len(msgs))
 	copy(sorted, msgs)

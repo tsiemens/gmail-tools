@@ -22,7 +22,7 @@ const (
 	// Labels and payload data
 	messageFormatMetadata MessageFormat = "metadata"
 	// Only the Raw. Payload will be nil
-	MessageFormatRaw MessageFormat = "raw"
+	messageFormatRaw MessageFormat = "raw"
 )
 
 func (f MessageFormat) ToString() string {
@@ -34,6 +34,7 @@ type MessageDetailLevel int
 const (
 	IdsOnly MessageDetailLevel = iota
 	LabelsOnly
+	Raw
 	LabelsAndPayload
 )
 
@@ -46,6 +47,8 @@ func (dl MessageDetailLevel) Format() MessageFormat {
 		format = messageFormatMetadata
 	case LabelsAndPayload:
 		format = messageFormatFull
+	case Raw:
+		format = messageFormatRaw
 	}
 	return format
 }
@@ -63,6 +66,8 @@ func MessageMeetsDetailLevel(msg *gm.Message, detail MessageDetailLevel) bool {
 		return true
 	case LabelsOnly:
 		return msg.LabelIds != nil && len(msg.LabelIds) > 0
+	case Raw:
+		return msg.Raw != ""
 	case LabelsAndPayload:
 	}
 	return MessageHasBody(msg)
@@ -297,7 +302,11 @@ func (h *MsgHelper) GetMessage(id string, detail MessageDetailLevel,
 func (h *MsgHelper) loadMessage(id string, detail MessageDetailLevel,
 ) (*gm.Message, error) {
 	prnt.Deb.Ln("Loading msg", id, "at level", detail)
-	msg, err := h.srv.Users.Messages.Get(h.User, id).Do()
+	msgGetCall := h.srv.Users.Messages.Get(h.User, id)
+	if detail != LabelsAndPayload {
+		msgGetCall = msgGetCall.Format(detail.Format().ToString())
+	}
+	msg, err := msgGetCall.Do()
 	if err == nil {
 		h.getCache().UpdateMsg(msg)
 	}
