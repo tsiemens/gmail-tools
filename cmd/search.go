@@ -295,8 +295,13 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 }
 
 var command = &cobra.Command{
-	Use:     "search [QUERY]",
-	Short:   "Searches for messages with the given query",
+	Use:   "search [QUERY]",
+	Short: "Searches for messages with the given query",
+	Long: `Searches for messages with the given query.
+
+Results are grouped by thread with terminal colors. Set NO_COLOR=1 to disable
+terminal styling (for example: NO_COLOR=1 gmailcli search 'is:unread').
+Piped output automatically omits terminal styling.`,
 	Aliases: []string{"find"},
 	RunE:    runSearchCmd,
 	Args:    cobra.RangeArgs(0, 1),

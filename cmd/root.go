@@ -52,7 +52,9 @@ var RootCmd = &cobra.Command{
 	Use:   cmdName(),
 	Short: "Cli tools for Gmail",
 	Long: `A cli tool which can be used to perform more advanced operations on
-a gmail account, via the provided Google APIs.`,
+a gmail account, via the provided Google APIs.
+
+Set NO_COLOR=1 to disable terminal styling in message and thread output.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },

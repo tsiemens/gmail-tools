@@ -3,9 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,154 +101,16 @@ func (h *GmailHelper) PrintMessagesJson(msgs []*gm.Message) {
 	fmt.Printf("%s", string(bytes))
 }
 
+func (h *GmailHelper) messageRenderer() messageRenderer {
+	return messageRenderer{labels: h.Msgs.MessageLabelNames, labelColors: h.conf.LabelColors}
+}
+
 func (h *GmailHelper) PrintMessage(m *gm.Message, indent int) {
-	var subject string
-	var from string
-	headers, err := api.GetMsgHeaders(m)
-	if err != nil {
-		headers = &api.Headers{}
-	}
-	if headers.Subject == "" {
-		subject = "<No subject>"
-	} else {
-		subject = headers.Subject
-	}
-	if headers.From.Name == "" && headers.From.Address == "" {
-		from = "<unknown sender>"
-	} else if headers.From.Name != "" {
-		from = headers.From.Name
-	} else {
-		from = headers.From.Address
-	}
-
-	labelNames := h.Msgs.MessageLabelNames(m)
-	otherThreadLabels := []string{}
-
-	threadId := m.ThreadId
-	if h.Msgs.ThreadIsLoaded(threadId) {
-		threadLabels, err := h.Msgs.ThreadLabelNames(threadId)
-		if err != nil {
-			otherThreadLabels = append(otherThreadLabels, "<ERROR LOADING THREAD LABELS>")
-		} else {
-			for _, l := range threadLabels {
-				if !util.StringSliceContains(l, labelNames) {
-					otherThreadLabels = append(otherThreadLabels, l)
-				}
-			}
-		}
-	}
-
-	// Filter out some labels here
-	var labelsToShow []string
-	addLabelsToShow := func(labels []string, addThreadMarker bool) {
-		for _, l := range labels {
-			if !util.DebugMode &&
-				(strings.HasPrefix(l, "CATEGORY_") ||
-					l == "INBOX") {
-				continue
-			}
-
-			preColor := ""
-			if color, ok := h.conf.LabelColors[l]; ok {
-				colorCode, ok := util.Colors[color]
-				if ok {
-					preColor = colorCode + util.Bold
-				} else {
-					prnt.StderrLog.Fatalf("'%s' is not a valid color\n", color)
-				}
-			}
-
-			if addThreadMarker {
-				l = "(+ " + l + ")"
-			}
-
-			labelsToShow = append(labelsToShow, preColor+l+util.ResetC)
-		}
-	}
-
-	addLabelsToShow(labelNames, false)
-	addLabelsToShow(otherThreadLabels, true)
-
-	maybeId := ""
-	if util.DebugMode {
-		maybeId = m.Id + " "
-	}
-
-	indentStr := strings.Repeat(" ", indent)
-
-	fmt.Printf("%s%s- %s [%s] %s\n", indentStr, maybeId, from, strings.Join(labelsToShow, ", "), subject)
+	h.messageRenderer().thread(os.Stdout, []*gm.Message{m}, strings.Repeat(" ", indent))
 }
 
 func (h *GmailHelper) PrintMessagesByCategory(msgs []*gm.Message) {
-	noCat := "NO CATEGORY"
-	catNames := []string{"PERSONAL", "SOCIAL", "PROMOTIONS", "UPDATES", "FORUMS"}
-	var catIds []string
-	for _, cn := range catNames {
-		catIds = append(catIds, "CATEGORY_"+cn)
-	}
-	msgsByCat := make(map[string][]*gm.Message)
-	msgsByCat[noCat] = make([]*gm.Message, 0)
-	for _, id := range catIds {
-		msgsByCat[id] = make([]*gm.Message, 0)
-	}
-
-	for _, m := range msgs {
-		foundCat := false
-		for _, lId := range m.LabelIds {
-			if _, ok := msgsByCat[lId]; ok {
-				msgsByCat[lId] = append(msgsByCat[lId], m)
-				foundCat = true
-			}
-		}
-		if !foundCat {
-			msgsByCat[noCat] = append(msgsByCat[noCat], m)
-			util.Debugf("Found no category for msg. Had labels %+v\n", m.LabelIds)
-			if util.DebugMode {
-				h.PrintMessage(m, 0)
-			}
-		}
-	}
-
-	catNames = append(catNames, noCat)
-	catIds = append(catIds, noCat)
-
-	for i, cat := range catIds {
-		catMsgs := msgsByCat[cat]
-		if len(catMsgs) > 0 {
-			fmt.Println(catNames[i])
-
-			msgsByThread := make(map[string][]*gm.Message)
-			for _, m := range catMsgs {
-				var threadMsgs []*gm.Message
-				var ok bool
-				if threadMsgs, ok = msgsByThread[m.ThreadId]; ok {
-					threadMsgs = append(threadMsgs, m)
-				} else {
-					threadMsgs = []*gm.Message{m}
-				}
-				msgsByThread[m.ThreadId] = threadMsgs
-			}
-
-			for threadId, msgs := range msgsByThread {
-				if util.DebugMode {
-					fmt.Println(threadId)
-				}
-
-				sort.Slice(
-					msgs,
-					func(i, j int) bool { return msgs[i].Id < msgs[j].Id })
-				first := true
-				for _, msg := range msgs {
-					if first {
-						h.PrintMessage(msg, 0)
-						first = false
-					} else {
-						h.PrintMessage(msg, 3)
-					}
-				}
-			}
-		}
-	}
+	h.messageRenderer().categories(os.Stdout, msgs)
 }
 
 func (h *GmailHelper) FilterMessages(

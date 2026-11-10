@@ -28,7 +28,7 @@ func IsTty() bool {
 func Style() *Styler {
 	return &Styler{
 		stylingString: "",
-		enabled:       IsTty(),
+		enabled:       IsTty() && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb",
 	}
 }
 
@@ -102,3 +102,9 @@ func (s *Styler) On(str string) string {
 	}
 	return str
 }
+
+// Dim renders secondary metadata with reduced emphasis.
+func (s *Styler) Dim() *Styler { return s.apply("\033[2m") }
+
+// ANSI applies an existing configured ANSI style, respecting color detection.
+func (s *Styler) ANSI(code string) *Styler { return s.apply(code) }
