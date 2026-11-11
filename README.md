@@ -116,3 +116,20 @@ HTTP failures include numeric `httpStatus`; kinds include `not_found` (404),
 `authentication` (401/403), `throttled` (429), `http`, and `network`.
 Exact-message label updates resolve all labels and check message existence
 before mutation; server failures still cannot guarantee atomic multi-batch writes.
+
+`update-msgs` checks message IDs using HTTP batches of up to 50 requests before
+applying changes. Scripts with trusted message IDs can use `--skip-msg-checks`
+to omit those checks (label names are still validated). Gmail may silently
+ignore nonexistent IDs when this option is used. For example:
+
+```sh
+gmailcli update-msgs --skip-msg-checks -y --add-label xCliTouched MSG_ID...
+```
+
+Use `--thread` to treat all arguments as thread IDs and update every message in
+those threads. All threads are fetched before any changes, and message ID checks
+are automatically skipped because Gmail supplies the IDs:
+
+```sh
+gmailcli update-msgs --thread -y --add-label xCliTouched THREAD_ID...
+```

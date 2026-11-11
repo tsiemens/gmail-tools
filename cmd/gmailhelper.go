@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -32,10 +33,10 @@ type GmailHelper struct {
 	mutex sync.Mutex
 }
 
-func NewGmailHelper(srv *gm.Service, user string, conf *config.Config) *GmailHelper {
+func NewGmailHelper(srv *gm.Service, user string, conf *config.Config, batchClient ...*http.Client) *GmailHelper {
 
 	accountHelper := api.NewAccountHelper(user, srv)
-	msgHelper := api.NewMsgHelper(user, srv, UseCacheFile)
+	msgHelper := api.NewMsgHelper(user, srv, UseCacheFile, batchClient...)
 	helper := &GmailHelper{
 		User: user, Account: accountHelper, Msgs: msgHelper,
 		srv: srv, conf: conf}

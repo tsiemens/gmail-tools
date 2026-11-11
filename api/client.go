@@ -235,6 +235,12 @@ func styledClientSecretInstructions() string {
 }
 
 func NewGmailClient(scope *ScopeProfile) *gmail.Service {
+	srv, _ := NewGmailClientWithHTTPClient(scope)
+	return srv
+}
+
+// NewGmailClientWithHTTPClient also exposes the authenticated transport for batch requests.
+func NewGmailClientWithHTTPClient(scope *ScopeProfile) (*gmail.Service, *http.Client) {
 	ctx := context.Background()
 
 	secret, err := getClientSecret()
@@ -258,7 +264,7 @@ func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 		util.ExternFatalf("%s %v",
 			prnt.Style().FgRed().Bold().On("Error creating Gmail client"), err)
 	}
-	return srv
+	return srv, client
 }
 
 // NewMachineClient reuses existing modify credentials without interactive authorization.

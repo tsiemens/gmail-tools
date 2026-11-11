@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 
 	gm "google.golang.org/api/gmail/v1"
@@ -94,8 +95,10 @@ func (h *AccountHelper) GetEmailAddress() (string, error) {
 type MsgHelper struct {
 	User string
 
-	srv    *gm.Service
-	labels map[string]string // Label ID to label name
+	batchClient       *http.Client
+	SkipMessageChecks bool
+	srv               *gm.Service
+	labels            map[string]string // Label ID to label name
 
 	useCacheFile bool
 	cache        *Cache
@@ -104,9 +107,14 @@ type MsgHelper struct {
 	mutex         sync.Mutex
 }
 
-func NewMsgHelper(user string, srv *gm.Service, useCacheFile bool) *MsgHelper {
+func NewMsgHelper(user string, srv *gm.Service, useCacheFile bool, batchClient ...*http.Client) *MsgHelper {
+	var client *http.Client
+	if len(batchClient) > 0 {
+		client = batchClient[0]
+	}
 	return &MsgHelper{
 		User:          user,
+		batchClient:   client,
 		srv:           srv,
 		useCacheFile:  useCacheFile,
 		loadedThreads: make(map[string]*gm.Thread),
@@ -642,10 +650,21 @@ func (h *MsgHelper) ApplyLabelsByIdIter(msgs SizedMessageIdIterator, add []Label
 		if !ok {
 			break
 		}
-		if _, err := h.srv.Users.Messages.Get(h.User, id).Format("minimal").Do(); err != nil {
-			return fmt.Errorf("message %s: %w", id, err)
-		}
+
 		ids = append(ids, id)
+	}
+	if !h.SkipMessageChecks {
+		if h.batchClient != nil {
+			if err := h.checkMessagesBatched(ids); err != nil {
+				return err
+			}
+		} else {
+			for _, id := range ids {
+				if _, err := h.srv.Users.Messages.Get(h.User, id).Format("minimal").Do(); err != nil {
+					return fmt.Errorf("message %s: %w", id, err)
+				}
+			}
+		}
 	}
 	return h.BatchModifyMessagesByIds(ids, &gm.BatchModifyMessagesRequest{AddLabelIds: a, RemoveLabelIds: r})
 }
