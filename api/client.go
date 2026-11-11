@@ -172,9 +172,9 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	// fmt.Printf("Paste Authorization code here: ")
 	openBrowserTab(authURL)
 
-	fmt.Println("Starting local endpoint at http://localhost:8080 "+
-		"(the authentication flow from link above should redirect here automatically. "+
-		"If not, open the link in your browser and enter the code by hand. "+
+	fmt.Println("Starting local endpoint at http://localhost:8080 " +
+		"(the authentication flow from link above should redirect here automatically. " +
+		"If not, open the link in your browser and enter the code by hand. " +
 		"It should be in the URL the auth flow tries to redirect to).")
 
 	code := startCodeFetcherWebserver()
@@ -220,13 +220,13 @@ func styledClientSecretInstructions() string {
 	bold := prnt.Style().Bold().Codes()
 	normal := prnt.Style().Normal().Codes()
 
-	return fmt.Sprintf("gmailcli requires a %spersonal%s API project in the Google developer console.\n" +
-		"1. Go to %shttps://console.developers.google.com%s\n" +
-		"2. Create a new project\n" +
-		"3. Go to the Credential section in the new project\n" +
-		"4. Click \"Create credentials\", and select OAuth client ID\n" +
-		"5. Select type \"Other\" for the credential\n" +
-		"6. Click the \"Download JSON\" button on the new credential.\n" +
+	return fmt.Sprintf("gmailcli requires a %spersonal%s API project in the Google developer console.\n"+
+		"1. Go to %shttps://console.developers.google.com%s\n"+
+		"2. Create a new project\n"+
+		"3. Go to the Credential section in the new project\n"+
+		"4. Click \"Create credentials\", and select OAuth client ID\n"+
+		"5. Select type \"Other\" for the credential\n"+
+		"6. Click the \"Download JSON\" button on the new credential.\n"+
 		"7. Move the downloaded credential file to %s%s%s",
 		bold, normal,
 		bold, normal,
@@ -248,7 +248,7 @@ func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 	if err != nil {
 		util.ExternFatalf("%s: %v\n\n%s\n",
 			prnt.Style().FgRed().Bold().On(
-				"Error: Unable to parse client secret file " + clientSecretFile()),
+				"Error: Unable to parse client secret file "+clientSecretFile()),
 			err, styledClientSecretInstructions())
 	}
 	client := getClient(ctx, config, scope)
@@ -259,4 +259,25 @@ func NewGmailClient(scope *ScopeProfile) *gmail.Service {
 			prnt.Style().FgRed().Bold().On("Error creating Gmail client"), err)
 	}
 	return srv
+}
+
+// NewMachineClient reuses existing modify credentials without interactive authorization.
+func NewMachineClient() (*gmail.Service, error) {
+	secret, err := getClientSecret()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := google.ConfigFromJSON(secret, ModifyScope.Scopes...)
+	if err != nil {
+		return nil, err
+	}
+	path, err := tokenCacheFile(ModifyScope)
+	if err != nil {
+		return nil, err
+	}
+	tok, err := tokenFromFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("credentials unavailable; run authorize first: %w", err)
+	}
+	return gmail.New(cfg.Client(context.Background(), tok))
 }

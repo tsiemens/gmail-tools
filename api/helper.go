@@ -266,6 +266,9 @@ func (h *MsgHelper) fetchThreads(threads []*gm.Thread, detail MessageDetailLevel
 func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) (
 	[]*gm.Message, error) {
 
+	if !h.useCacheFile {
+		return h.fetchMessages(msgs, detail)
+	}
 	cache := h.getCache()
 
 	newMsgs := make([]*gm.Message, 0, len(msgs))
@@ -288,6 +291,9 @@ func (h *MsgHelper) LoadMessages(msgs []*gm.Message, detail MessageDetailLevel) 
 
 func (h *MsgHelper) GetMessage(id string, detail MessageDetailLevel,
 ) (*gm.Message, error) {
+	if !h.useCacheFile {
+		return h.loadMessage(id, detail)
+	}
 	cache := h.getCache()
 	cachedMsg, ok := cache.Msg(id)
 	if ok && MessageMeetsDetailLevel(cachedMsg, detail) {
@@ -319,12 +325,6 @@ func (h *MsgHelper) ThreadIsLoaded(id string) bool {
 }
 
 func (h *MsgHelper) getJustThread(id string) (*gm.Thread, error) {
-	h.mutex.Lock()
-	preloadedThread, ok := h.loadedThreads[id]
-	h.mutex.Unlock()
-	if ok {
-		return preloadedThread, nil
-	}
 
 	// Note that this will never load the full message texts.
 	thread, err := h.srv.Users.Threads.Get(h.User, id).Do()
@@ -495,7 +495,7 @@ func (h *MsgHelper) LabelIdFromName(label string) string {
 			return lId
 		}
 	}
-	log.Fatalf("No label named %s found\n", label)
+	log.Fatalf("No label named %s found; create it in Gmail web UI first\n", label)
 	return ""
 }
 
@@ -600,22 +600,54 @@ func (h *MsgHelper) BatchModifyMessagesByIds(ids []string, modReq *gm.BatchModif
 	return h.BatchModifyByIdIter(iterator, modReq)
 }
 
-func (h *MsgHelper) ApplyLabels(
-	msgs []*gm.Message, labelsToAdd []Label, labelsToRemove []Label) error {
-	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds:    h.LabelIdsForLabels(labelsToAdd),
-		RemoveLabelIds: h.LabelIdsForLabels(labelsToRemove),
+// Resolve every label before any mutation. Labels must already exist in Gmail.
+func (h *MsgHelper) resolveLabels(labels []Label) ([]string, error) {
+	if err := h.loadLabels(); err != nil {
+		return nil, err
 	}
-	return h.BatchModifyMessages(msgs, &modReq)
+	ids := make([]string, 0, len(labels))
+	for _, l := range labels {
+		id := l.id
+		if id == "" {
+			for k, v := range h.labels {
+				if v == l.name {
+					id = k
+					break
+				}
+			}
+		}
+		if _, ok := h.labels[id]; !ok {
+			return nil, fmt.Errorf("label %q does not exist; create it in Gmail web UI first", l.String())
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
-
-func (h *MsgHelper) ApplyLabelsByIdIter(
-	msgs SizedMessageIdIterator, labelsToAdd []Label, labelsToRemove []Label) error {
-	modReq := gm.BatchModifyMessagesRequest{
-		AddLabelIds:    h.LabelIdsForLabels(labelsToAdd),
-		RemoveLabelIds: h.LabelIdsForLabels(labelsToRemove),
+func (h *MsgHelper) ApplyLabels(msgs []*gm.Message, add []Label, remove []Label) error {
+	return h.ApplyLabelsByIdIter(SizedMessageIdIteratorFromMsgs(msgs), add, remove)
+}
+func (h *MsgHelper) ApplyLabelsByIdIter(msgs SizedMessageIdIterator, add []Label, remove []Label) error {
+	a, err := h.resolveLabels(add)
+	if err != nil {
+		return err
 	}
-	return h.BatchModifyByIdIter(msgs, &modReq)
+	r, err := h.resolveLabels(remove)
+	if err != nil {
+		return err
+	}
+	// Gmail batchModify can silently ignore missing IDs. Preflight exact IDs.
+	ids := make([]string, 0, msgs.Len())
+	for {
+		id, ok := msgs.Next()
+		if !ok {
+			break
+		}
+		if _, err := h.srv.Users.Messages.Get(h.User, id).Format("minimal").Do(); err != nil {
+			return fmt.Errorf("message %s: %w", id, err)
+		}
+		ids = append(ids, id)
+	}
+	return h.BatchModifyMessagesByIds(ids, &gm.BatchModifyMessagesRequest{AddLabelIds: a, RemoveLabelIds: r})
 }
 
 func (h *MsgHelper) ApplyLabelsToThreads(threads []*gm.Thread, labelNames []string) error {

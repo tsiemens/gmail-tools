@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -49,8 +48,10 @@ func cmdName() string {
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   cmdName(),
-	Short: "Cli tools for Gmail",
+	Use:           cmdName(),
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	Short:         "Cli tools for Gmail",
 	Long: `A cli tool which can be used to perform more advanced operations on
 a gmail account, via the provided Google APIs.
 
@@ -64,7 +65,7 @@ Set NO_COLOR=1 to disable terminal styling in message and thread output.`,
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		printCommandError(err)
 		os.Exit(1)
 	}
 	util.RunCleanupHandlers()
@@ -101,6 +102,12 @@ func init() {
 // onInit reads in config file and ENV variables if set, and performs global
 // or common actions before running command functions.
 func onInit() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--json" || arg == "--json=true" {
+			prnt.NoHumanOnly = true
+			return
+		}
+	}
 	prnt.NoHumanOnly = BatchMode
 	prnt.DebugMode = util.DebugMode
 	if Quiet && Verbose {
@@ -126,7 +133,7 @@ func onInit() {
 	// // homedir "github.com/mitchellh/go-homedir"
 	//	 home, err := homedir.Dir()
 	//	 if err != nil {
-	//		fmt.Println(err)
+	//		printCommandError(err)
 	//		os.Exit(1)
 	//	}
 

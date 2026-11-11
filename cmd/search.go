@@ -183,6 +183,9 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 
 func runSearchCmd(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+	if searchPrintJson || len(searchLabelIDs) > 0 || searchSpamTrash || cmd.Flags().Changed("page-size") || cmd.Flags().Changed("page-token") {
+		return runMachineSearch(cmd, args)
+	}
 	if searchInteresting && searchUninteresting {
 		prnt.StderrLog.Fatalln("-u and -i options are mutually exclusive")
 	}
@@ -309,6 +312,10 @@ Piped output automatically omits terminal styling.`,
 
 func init() {
 	RootCmd.AddCommand(command)
+	command.Flags().StringArrayVar(&searchLabelIDs, "label-id", nil, "Exact label ID (repeatable)")
+	command.Flags().BoolVar(&searchSpamTrash, "include-spam-trash", false, "Include spam and trash")
+	command.Flags().Int64Var(&searchPageSize, "page-size", 500, "Explicit page size, 1–500")
+	command.Flags().StringVar(&searchPageToken, "page-token", "", "Resume an explicit page")
 
 	command.Flags().StringArrayVarP(&searchLabelRegexps, "labelp", "l", []string{},
 		"Label regexps to match in the search (may be provided multiple times)")

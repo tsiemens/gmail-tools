@@ -73,3 +73,46 @@ This application does not provide a global API key. You will need to create an A
 To log into a gmail account, run any gmailcli command which attempts to access the service. Follow the link, and paste the authentication code into the console.
 
 `gmailcli authorize` is conveniently provided which does nothing but sign in.
+
+### Automation JSON interface (v1)
+
+Use `--assert-email user@example.com` on reads and writes to verify the account
+before message access. Authenticate interactively with `authorize` first.
+JSON reads reuse modify credentials but never modify Gmail and bypass caches
+and local interest plugins.
+
+- `show ID --json --format metadata|full` returns a Gmail message resource.
+- `show ID --thread [--json] [--format metadata|full]` fetches the entire
+  conversation.
+- `show ID --json --raw` returns the message with base64url RFC 5322 `raw`.
+  Raw cannot be combined with thread or an explicit format. JSON cannot touch
+  messages or use display flags.
+- `labels list --json` returns an array of existing labels with exact `id`,
+  `name`, and `type`. Slash-separated names do not imply membership.
+  Create missing labels in Gmail's web UI; the CLI never creates labels.
+- `account --json` returns the authenticated Gmail profile.
+- `search --json --label-id Label_123 --include-spam-trash` enumerates pages
+  automatically. Ordinary JSON retains its array schema (`messageId`,
+  `threadId`, `timestamp`, `subject`, `from`, `labels`); metadata requires
+  one GET per message plus label lookup. `--json --ids-only` skips these
+  lookups and returns Gmail message references with `id` and `threadId`.
+- `search --json --page-size 500 [--page-token TOKEN]` returns one unfiltered
+  listing page as `{"messages":[],"nextPageToken":"..."}`. The token is omitted
+  on the last page. Follow every token and deduplicate IDs. Paging rejects
+  `--max`; JSON search rejects local filters, summaries, and mutations.
+  `--label-id` is repeatable (all labels must match). Spam/trash inclusion is
+  opt-in. Empty search succeeds with an empty array.
+
+Resource JSON follows Gmail shapes: threads have `id` and `messages`;
+messages have `id`, `threadId`, `labelIds`, `internalDate`, `payload`,
+and `raw` where applicable. Optional empty resource arrays/fields are omitted.
+Treat absent arrays as empty. `internalDate` is a decimal **string** of Unix
+milliseconds, as in Gmail; legacy search `timestamp` is a JSON number in
+milliseconds. Consumers should tolerate additional fields.
+
+Successful JSON writes only the result to stdout. Errors exit nonzero and
+write `{"error":{"kind":"invalid_input","message":"..."}}` to stderr.
+HTTP failures include numeric `httpStatus`; kinds include `not_found` (404),
+`authentication` (401/403), `throttled` (429), `http`, and `network`.
+Exact-message label updates resolve all labels and check message existence
+before mutation; server failures still cannot guarantee atomic multi-batch writes.

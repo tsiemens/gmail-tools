@@ -69,12 +69,21 @@ var showCmd = &cobra.Command{
 	Use:     "show [MESSAGE_ID]",
 	Short:   "Shows details for the message ID",
 	Aliases: []string{"sh"},
-	Run:     runShowCmd,
-	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if showJSON || showThread || cmd.Flags().Changed("format") {
+			return runStructuredShow(cmd, args)
+		}
+		runShowCmd(cmd, args)
+		return nil
+	},
+	Args: cobra.ExactArgs(1),
 }
 
 func init() {
 	RootCmd.AddCommand(showCmd)
+	showCmd.Flags().BoolVar(&showJSON, "json", false, "Output JSON")
+	showCmd.Flags().BoolVar(&showThread, "thread", false, "Read a complete thread")
+	showCmd.Flags().StringVar(&showFormat, "format", "full", "metadata or full")
 
 	showCmd.Flags().BoolVarP(&showTouch, "touch", "t", false,
 		"Mark message as touched")
