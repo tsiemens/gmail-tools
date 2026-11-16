@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -108,7 +109,7 @@ func dumpExtraFilters(gHelper *GmailHelper) {
 	}
 }
 
-func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message {
+func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) ([]*gm.Message, error) {
 	allFilters := make(map[string]*plugin.MessageFilter)
 	plugins := gHelper.GetPlugins()
 	for _, plug := range plugins {
@@ -130,8 +131,7 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 			prnt.Deb.Ln("Will apply filter", name)
 			filtersToApply = append(filtersToApply, filterAndDirection{filter, false})
 		} else {
-			prnt.StderrLog.Fatalf(
-				"'%s' is not an available xfilter. Run search --list-xfilters for available filters.\n", name)
+			return nil, fmt.Errorf("'%s' is not an available xfilter. Run search --list-xfilters for available filters.", name)
 		}
 	}
 
@@ -140,8 +140,7 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 			prnt.Deb.Ln("Will inversely apply filter", name)
 			filtersToApply = append(filtersToApply, filterAndDirection{filter, true})
 		} else {
-			prnt.StderrLog.Fatalf(
-				"'%s' is not an available xfilter. Run search --list-xfilters for available filters.\n", name)
+			return nil, fmt.Errorf("'%s' is not an available xfilter. Run search --list-xfilters for available filters.", name)
 		}
 	}
 
@@ -178,7 +177,7 @@ func applyCustomFilters(msgs []*gm.Message, gHelper *GmailHelper) []*gm.Message 
 	}
 
 	prnt.Hum.Always.P("\n")
-	return filteredMsgs
+	return filteredMsgs, nil
 }
 
 func runSearchCmd(cmd *cobra.Command, args []string) error {
@@ -256,7 +255,10 @@ func runSearchCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0 {
-		msgs = applyCustomFilters(msgs, gHelper)
+		msgs, err = applyCustomFilters(msgs, gHelper)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(msgs) == 0 {

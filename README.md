@@ -78,8 +78,8 @@ To log into a gmail account, run any gmailcli command which attempts to access t
 
 Use `--assert-email user@example.com` on reads and writes to verify the account
 before message access. Authenticate interactively with `authorize` first.
-JSON reads reuse modify credentials but never modify Gmail and bypass caches
-and local interest plugins.
+JSON reads use the credentials created by `authorize`, but do not modify Gmail
+or use the disk cache.
 
 - `show ID --json --format metadata|full` returns a Gmail message resource.
 - `show ID --thread [--json] [--format metadata|full]` fetches the entire
@@ -94,14 +94,22 @@ and local interest plugins.
 - `search --json --label-id Label_123 --include-spam-trash` enumerates pages
   automatically. Ordinary JSON retains its array schema (`messageId`,
   `threadId`, `timestamp`, `subject`, `from`, `labels`); metadata requires
-  one GET per message plus label lookup. `--json --ids-only` skips these
-  lookups and returns Gmail message references with `id` and `threadId`.
-- `search --json --page-size 500 [--page-token TOKEN]` returns one unfiltered
-  listing page as `{"messages":[],"nextPageToken":"..."}`. The token is omitted
-  on the last page. Follow every token and deduplicate IDs. Paging rejects
-  `--max`; JSON search rejects local filters, summaries, and mutations.
-  `--label-id` is repeatable (all labels must match). Spam/trash inclusion is
-  opt-in. Empty search succeeds with an empty array.
+  one GET per message plus label lookup. `--json --ids-only` returns Gmail
+  message references with `id` and `threadId`, loading details only as needed
+  for local filters.
+- `search --json --page-size 500 [--page-token TOKEN]` returns one Gmail
+  listing page as `{"messages":[],"nextPageToken":"..."}`, with messages
+  represented by `id` and `threadId`. Local filters apply to that page and
+  can leave it empty even when more pages remain. Follow every token until
+  `nextPageToken` is omitted; an empty `messages` array does not signal the
+  end. Keep the query and filters unchanged when continuing. Paging rejects
+  `--max`.
+- JSON search supports `--labelp`, `--interesting`, `--uninteresting`,
+  `--outdated`, `--xfilter`, and `--not-xfilter`, with or without explicit
+  paging. Filters run after collecting candidates; `--page-size` and `--max`
+  limit candidates before filtering. JSON search still rejects summaries and
+  mutations. `--label-id` is repeatable (all labels must match). Spam/trash
+  inclusion is opt-in. Empty non-paged search succeeds with an empty array.
 
 Resource JSON follows Gmail shapes: threads have `id` and `messages`;
 messages have `id`, `threadId`, `labelIds`, `internalDate`, `payload`,

@@ -7,10 +7,12 @@ import (
 	"io"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tsiemens/gmail-tools/api"
+	"github.com/tsiemens/gmail-tools/plugin"
 	gm "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
 )
@@ -24,6 +26,7 @@ var searchPageToken string
 var accountJSON, labelsJSON bool
 
 var machineClient = api.NewMachineClient
+var machineSearchPlugins = plugin.LoadPlugins
 
 func writeJSON(w io.Writer, v interface{}) error { return json.NewEncoder(w).Encode(v) }
 
@@ -136,8 +139,20 @@ func runMachineSearch(cmd *cobra.Command, args []string) error {
 	if paging && (searchPageSize < 1 || searchPageSize > 500 || cmd.Flags().Changed("max")) {
 		return fmt.Errorf("--page-size must be 1–500; paging cannot be combined with --max")
 	}
-	if searchInteresting || searchUninteresting || searchOutdated || len(searchLabelRegexps) > 0 || len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0 || searchDumpCustomFilters || searchShowSummary || CmdMsgLabelModOptions.Touch || CmdMsgLabelModOptions.Trash || CmdMsgLabelModOptions.Archive || len(CmdMsgLabelModOptions.LabelNamesToAdd) > 0 || len(CmdMsgLabelModOptions.LabelNamesToRemove) > 0 {
-		return fmt.Errorf("machine search cannot be combined with local filters, summary, or mutations")
+	localFilters := searchInteresting || searchUninteresting || searchOutdated || len(searchLabelRegexps) > 0 || len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0
+	if searchInteresting && searchUninteresting {
+		return fmt.Errorf("--interesting and --uninteresting are mutually exclusive")
+	}
+	var labelRegexps []*regexp.Regexp
+	for _, pattern := range searchLabelRegexps {
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("invalid --labelp pattern: %w", err)
+		}
+		labelRegexps = append(labelRegexps, compiled)
+	}
+	if searchDumpCustomFilters || searchShowSummary || CmdMsgLabelModOptions.Touch || CmdMsgLabelModOptions.Trash || CmdMsgLabelModOptions.Archive || len(CmdMsgLabelModOptions.LabelNamesToAdd) > 0 || len(CmdMsgLabelModOptions.LabelNamesToRemove) > 0 {
+		return fmt.Errorf("machine search cannot be combined with --list-xfilters, summary, or mutations")
 	}
 	s, _, e := checkedService()
 	if e != nil {
@@ -163,22 +178,38 @@ func runMachineSearch(cmd *cobra.Command, args []string) error {
 			break
 		}
 	}
-	if paging {
-		return writeJSON(cmd.OutOrStdout(), struct {
-			Messages []*gm.Message `json:"messages"`
-			Next     string        `json:"nextPageToken,omitempty"`
-		}{msgs, token})
+	if localFilters {
+		h := &GmailHelper{User: api.DefaultUser, srv: s, Msgs: api.NewMsgHelper(api.DefaultUser, s, false)}
+		if searchInteresting || searchUninteresting || searchOutdated || len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0 {
+			h.plugins = machineSearchPlugins()
+		}
+		msgs, e = filterMachineSearch(msgs, h, query, labelRegexps)
+		if e != nil {
+			return e
+		}
+	}
+	if paging || (searchPrintIdsOnly && searchPrintJson) {
+		// Filtering may load details; paged and IDs-only output uses references.
+		refs := make([]*gm.Message, 0, len(msgs))
+		for _, m := range msgs {
+			refs = append(refs, &gm.Message{Id: m.Id, ThreadId: m.ThreadId})
+		}
+		if paging {
+			// This is Gmail's token, independent of how many local matches remain.
+			return writeJSON(cmd.OutOrStdout(), struct {
+				Messages []*gm.Message `json:"messages"`
+				Next     string        `json:"nextPageToken,omitempty"`
+			}{refs, token})
+		}
+		return writeJSON(cmd.OutOrStdout(), refs)
 	}
 	if searchPrintIdsOnly {
-		if searchPrintJson {
-			return writeJSON(cmd.OutOrStdout(), msgs)
-		}
 		for _, m := range msgs {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s,%s\n", m.Id, m.ThreadId)
 		}
 		return nil
 	}
-	// Preserve the existing search JSON schema, using metadata without plugins.
+	// Preserve the existing search JSON schema, fetching metadata for the filtered results.
 	labels, e := s.Users.Labels.List(api.DefaultUser).Do()
 	if e != nil {
 		return e
@@ -217,6 +248,53 @@ func runMachineSearch(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
+
+// Apply local filters after collecting the Gmail candidates, before rendering.
+// Keeping only candidate IDs preserves query, label-ID, spam/trash and max limits.
+func filterMachineSearch(msgs []*gm.Message, h *GmailHelper, query string, labelRegexps []*regexp.Regexp) ([]*gm.Message, error) {
+	if searchOutdated {
+		outdated := make(map[string]bool)
+		for _, plug := range h.GetPlugins() {
+			if plug.OutdatedMessages != nil {
+				for _, msg := range plug.OutdatedMessages(query, h.Msgs, searchMaxMsgs) {
+					outdated[msg.Id] = true
+				}
+			}
+		}
+		kept := make([]*gm.Message, 0)
+		for _, msg := range msgs {
+			if outdated[msg.Id] {
+				kept = append(kept, msg)
+			}
+		}
+		msgs = kept
+	}
+	var err error
+	if len(labelRegexps) > 0 {
+		msgs, err = h.FilterMessagesByLabelRegexps(labelRegexps, msgs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if searchInteresting || searchUninteresting {
+		interest := Interesting
+		if searchUninteresting {
+			interest = Uninteresting
+		}
+		msgs, err = h.FilterMessagesByInterest(interest, msgs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(searchCustomFilterNames) > 0 || len(searchInverseCustomFilterNames) > 0 {
+		msgs, err = applyCustomFilters(msgs, h)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return msgs, nil
+}
+
 func init() {
 	account := &cobra.Command{Use: "account", Args: cobra.NoArgs, RunE: func(c *cobra.Command, a []string) error {
 		_, p, e := checkedService()
